@@ -1,6 +1,6 @@
 const fetch = require("node-fetch");
 
-const BASE = "https://graph.instagram.com/v19.0";
+const BASE = "https://graph.facebook.com/v21.0";
 
 // ─── Sliding-window rate limiter: max 200 outgoing messages per hour ──────────
 const HOURLY_LIMIT = 200;
