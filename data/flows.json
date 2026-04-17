@@ -70,7 +70,7 @@
   },
   {
     "id": "flow_8043f195-89a2-4140-927c-59a1d5274b8f",
-    "active": false,
+    "active": true,
     "name": "Test",
     "trigger": {
       "type": "keyword",
