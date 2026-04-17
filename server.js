@@ -4,6 +4,7 @@ const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 
 const app = express();
+app.set("trust proxy", 1); // required for express-rate-limit behind Render's proxy
 app.use(cors());
 app.use(express.json());
 
