@@ -1,0 +1,88 @@
+[
+  {
+    "id": "flow_welcome",
+    "name": "Welcome DM sequence",
+    "active": true,
+    "trigger": {
+      "type": "new_follower"
+    },
+    "steps": [
+      {
+        "type": "delay",
+        "ms": 10000
+      },
+      {
+        "type": "send_message",
+        "message": "Hey! Thanks for following 👋 We'd love to help you out — what brings you here today?"
+      }
+    ]
+  },
+  {
+    "id": "flow_link_keyword",
+    "name": "Keyword: \"link\"",
+    "active": true,
+    "trigger": {
+      "type": "keyword",
+      "keywords": [
+        "link",
+        "links"
+      ]
+    },
+    "steps": [
+      {
+        "type": "send_message",
+        "message": "Here's the link you asked for 👇\nhttps://yourwebsite.com/link-in-bio"
+      }
+    ]
+  },
+  {
+    "id": "flow_comment_price",
+    "name": "Comment → DM offer",
+    "active": true,
+    "trigger": {
+      "type": "comment_keyword",
+      "keywords": [
+        "price",
+        "how much",
+        "cost"
+      ]
+    },
+    "steps": [
+      {
+        "type": "send_message",
+        "message": "Hey! Saw your comment 😊 Here's our pricing page: https://yourwebsite.com/pricing — feel free to reply here if you have questions!"
+      }
+    ]
+  },
+  {
+    "id": "flow_story_reply",
+    "name": "Story reply auto-DM",
+    "active": true,
+    "trigger": {
+      "type": "story_reply"
+    },
+    "steps": [
+      {
+        "type": "send_message",
+        "message": "Thanks for watching our story! Can I help you with anything? 🙌"
+      }
+    ]
+  },
+  {
+    "id": "flow_8043f195-89a2-4140-927c-59a1d5274b8f",
+    "active": false,
+    "name": "Test",
+    "trigger": {
+      "type": "keyword",
+      "keywords": [
+        "test"
+      ]
+    },
+    "steps": [
+      {
+        "type": "send_message",
+        "message": "Test complete"
+      }
+    ]
+  }
+]
