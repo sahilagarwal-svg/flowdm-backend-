@@ -4,7 +4,7 @@ const { v4: uuid } = require("uuid");
 const db      = require("../services/db");
 
 const VALID_TRIGGERS = ["keyword", "new_follower", "any_dm", "story_reply", "comment_keyword"];
-const VALID_STEPS    = ["send_message", "send_image", "delay"];
+const VALID_STEPS    = ["send_message", "send_image", "send_video", "send_buttons", "delay"];
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 function validateFlow(body) {
@@ -39,6 +39,23 @@ function validateFlow(body) {
       } else if (step.type === "send_image") {
         if (!step.imageUrl || !String(step.imageUrl).trim()) {
           errors.push(`steps[${i}].imageUrl must not be empty`);
+        }
+      } else if (step.type === "send_video") {
+        if (!step.videoUrl || !String(step.videoUrl).trim()) {
+          errors.push(`steps[${i}].videoUrl must not be empty`);
+        }
+      } else if (step.type === "send_buttons") {
+        if (!step.text || !String(step.text).trim()) {
+          errors.push(`steps[${i}].text must not be empty`);
+        }
+        if (!Array.isArray(step.buttons) || step.buttons.length === 0) {
+          errors.push(`steps[${i}].buttons must be a non-empty array`);
+        } else {
+          step.buttons.forEach((btn, j) => {
+            if (!btn.title || !String(btn.title).trim()) {
+              errors.push(`steps[${i}].buttons[${j}].title must not be empty`);
+            }
+          });
         }
       } else if (step.type === "delay") {
         if (typeof step.ms !== "number" || step.ms < 0) {

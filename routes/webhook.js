@@ -47,7 +47,8 @@ router.post("/", verifyN8nSecret, async (req, res) => {
             console.log(`[Webhook] Story reply from ${senderId}`);
             await FlowEngine.handleStoryReply(senderId, event);
           } else {
-            const text = event.message.text || "";
+            // quick_reply.payload routes to the next flow by keyword
+            const text = event.message.quick_reply?.payload || event.message.text || "";
             console.log(`[Webhook] DM from ${senderId}: "${text}"`);
             await FlowEngine.handleIncomingDM(senderId, text);
           }

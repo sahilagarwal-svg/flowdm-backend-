@@ -95,16 +95,21 @@ class FlowEngine {
       try {
         if (step.type === "send_message") {
           await this._sendWithFallback(recipientId, { type: "text", message: step.message });
-          await naturalDelay(2000, 5000); // natural pause between messages
+          await naturalDelay(2000, 5000);
         } else if (step.type === "send_image") {
           await this._sendWithFallback(recipientId, { type: "image", imageUrl: step.imageUrl });
+          await naturalDelay(2000, 5000);
+        } else if (step.type === "send_video") {
+          await this._sendWithFallback(recipientId, { type: "video", videoUrl: step.videoUrl });
+          await naturalDelay(2000, 5000);
+        } else if (step.type === "send_buttons") {
+          await this._sendWithFallback(recipientId, { type: "buttons", text: step.text, buttons: step.buttons });
           await naturalDelay(2000, 5000);
         } else if (step.type === "delay") {
           await this._sleep(step.ms);
         }
       } catch (err) {
         console.error(`[FlowEngine] Step "${step.type}" failed for ${recipientId}:`, err.message);
-        // Continue to next step even if one fails
       }
     }
   }
@@ -114,6 +119,10 @@ class FlowEngine {
     try {
       if (task.type === "image") {
         await InstagramAPI.sendImageDM(recipientId, task.imageUrl);
+      } else if (task.type === "video") {
+        await InstagramAPI.sendVideoDM(recipientId, task.videoUrl);
+      } else if (task.type === "buttons") {
+        await InstagramAPI.sendButtonsDM(recipientId, task.text, task.buttons);
       } else {
         await InstagramAPI.sendDM(recipientId, task.message);
       }
