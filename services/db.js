@@ -4,7 +4,7 @@ const { DatabaseSync } = require("node:sqlite");
 const path = require("path");
 const fs   = require("fs");
 
-const DATA_DIR = path.join(__dirname, "../data");
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "../data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const sqlite = new DatabaseSync(path.join(DATA_DIR, "flowdm.db"));
@@ -34,53 +34,6 @@ sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_flows_active ON flows(active);
 `);
 
-// ─── Seed default flows on first run ─────────────────────────────────────────
-const { c: flowCount } = sqlite.prepare("SELECT COUNT(*) as c FROM flows").get();
-if (flowCount === 0) {
-  const ins = sqlite.prepare(
-    "INSERT INTO flows (id, name, active, trigger_data, steps) VALUES (?, ?, ?, ?, ?)"
-  );
-  const defaults = [
-    {
-      id: "flow_welcome",
-      name: "Welcome DM sequence",
-      active: 1,
-      trigger: JSON.stringify({ type: "new_follower" }),
-      steps: JSON.stringify([
-        { type: "delay", ms: 10000 },
-        { type: "send_message", message: "Hey! Thanks for following 👋 We'd love to help you out — what brings you here today?" },
-      ]),
-    },
-    {
-      id: "flow_link_keyword",
-      name: 'Keyword: "link"',
-      active: 1,
-      trigger: JSON.stringify({ type: "keyword", keywords: ["link", "links"] }),
-      steps: JSON.stringify([
-        { type: "send_message", message: "Here's the link you asked for 👇\nhttps://yourwebsite.com/link-in-bio" },
-      ]),
-    },
-    {
-      id: "flow_comment_price",
-      name: "Comment → DM offer",
-      active: 1,
-      trigger: JSON.stringify({ type: "comment_keyword", keywords: ["price", "how much", "cost"] }),
-      steps: JSON.stringify([
-        { type: "send_message", message: "Hey! Saw your comment 😊 Here's our pricing page: https://yourwebsite.com/pricing" },
-      ]),
-    },
-    {
-      id: "flow_story_reply",
-      name: "Story reply auto-DM",
-      active: 1,
-      trigger: JSON.stringify({ type: "story_reply" }),
-      steps: JSON.stringify([
-        { type: "send_message", message: "Thanks for watching our story! Can I help you with anything? 🙌" },
-      ]),
-    },
-  ];
-  for (const r of defaults) ins.run(r.id, r.name, r.active, r.trigger, r.steps);
-}
 
 // ─── Row → plain JS object ────────────────────────────────────────────────────
 function toFlow(row) {
