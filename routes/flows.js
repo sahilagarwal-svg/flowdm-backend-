@@ -48,8 +48,8 @@ function validateFlow(body) {
         if (!step.text || !String(step.text).trim()) {
           errors.push(`steps[${i}].text must not be empty`);
         }
-        if (!Array.isArray(step.buttons) || step.buttons.length === 0) {
-          errors.push(`steps[${i}].buttons must be a non-empty array`);
+        if (!Array.isArray(step.buttons) || step.buttons.length === 0 || step.buttons.length > 3) {
+          errors.push(`steps[${i}].buttons must have 1–3 buttons (Instagram button template limit)`);
         } else {
           step.buttons.forEach((btn, j) => {
             if (!btn.title || !String(btn.title).trim()) {
