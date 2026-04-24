@@ -35,6 +35,11 @@ sqlite.exec(`
 `);
 
 
+// ─── One-time cleanup: remove old hardcoded seed flows ───────────────────────
+["flow_welcome", "flow_link_keyword", "flow_comment_price", "flow_story_reply"].forEach(id => {
+  sqlite.prepare("DELETE FROM flows WHERE id = ?").run(id);
+});
+
 // ─── Row → plain JS object ────────────────────────────────────────────────────
 function toFlow(row) {
   return {
