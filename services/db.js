@@ -31,29 +31,6 @@ async function init() {
   console.log("[DB] PostgreSQL tables ready");
 }
 
-<<<<<<< HEAD
-  CREATE TABLE IF NOT EXISTS events (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    type      TEXT NOT NULL,
-    sender_id TEXT,
-    flow_id   TEXT,
-    keyword   TEXT,
-    timestamp TEXT NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_events_ts    ON events(timestamp DESC);
-  CREATE INDEX IF NOT EXISTS idx_flows_active ON flows(active);
-`);
-
-
-// ─── One-time cleanup: remove old hardcoded seed flows ───────────────────────
-["flow_welcome", "flow_link_keyword", "flow_comment_price", "flow_story_reply"].forEach(id => {
-  sqlite.prepare("DELETE FROM flows WHERE id = ?").run(id);
-});
-
-// ─── Row → plain JS object ────────────────────────────────────────────────────
-=======
->>>>>>> eb5a4f7 (suparbase update)
 function toFlow(row) {
   return {
     id:      row.id,
