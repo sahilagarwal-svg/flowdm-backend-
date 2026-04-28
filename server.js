@@ -21,17 +21,21 @@ const webhookLimiter = rateLimit({
   message:        { error: "Too many requests — slow down" },
 });
 
+const path            = require("path");
 const db              = require("./services/db");
 const requireAuth     = require("./middleware/auth");
 const authRouter      = require("./routes/auth");
 const webhookRouter   = require("./routes/webhook");
 const flowRouter      = require("./routes/flows");
 const analyticsRouter = require("./routes/analytics");
+const uploadRouter    = require("./routes/upload");
 
 app.use("/api/auth",       authRouter);
 app.use("/webhook",        webhookLimiter, webhookRouter);
 app.use("/api/flows",      requireAuth, flowRouter);
 app.use("/api/analytics",  requireAuth, analyticsRouter);
+app.use("/api/upload",     requireAuth, uploadRouter);
+app.use("/uploads",        express.static(path.join(__dirname, "uploads")));
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
