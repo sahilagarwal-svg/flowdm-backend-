@@ -2,7 +2,6 @@ const InstagramAPI = require("./InstagramAPI");
 const MessageQueue = require("./MessageQueue");
 const db           = require("./db");
 
-// Returns a promise that resolves after a random delay in [minMs, maxMs]
 function naturalDelay(minMs = 2000, maxMs = 5000) {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -13,7 +12,7 @@ class FlowEngine {
   async handleIncomingDM(senderId, text) {
     try {
       const lowerText = (text || "").toLowerCase().trim();
-      const flows     = db.getActiveFlows();
+      const flows     = await db.getActiveFlows();
 
       for (const flow of flows) {
         if (flow.trigger.type !== "keyword") continue;
@@ -21,7 +20,7 @@ class FlowEngine {
         if (keywords.some((kw) => lowerText.includes(kw))) {
           console.log(`[FlowEngine] "${flow.name}" triggered by keyword "${lowerText}" from ${senderId}`);
           await this.executeFlow(flow, senderId);
-          db.logEvent({ type: "dm_keyword", senderId, flowId: flow.id, keyword: lowerText });
+          await db.logEvent({ type: "dm_keyword", senderId, flowId: flow.id, keyword: lowerText });
           return;
         }
       }
@@ -38,14 +37,14 @@ class FlowEngine {
   // ─── Handle new follower ───────────────────────────────────────────────────
   async handleNewFollower(followerId) {
     try {
-      const flow = db.getActiveFlows().find((f) => f.trigger.type === "new_follower");
+      const flows = await db.getActiveFlows();
+      const flow  = flows.find((f) => f.trigger.type === "new_follower");
       if (!flow) return;
 
-      // 10-second "thinking" delay before the welcome DM
       setTimeout(async () => {
         try {
           await this.executeFlow(flow, followerId);
-          db.logEvent({ type: "new_follower_dm", senderId: followerId, flowId: flow.id });
+          await db.logEvent({ type: "new_follower_dm", senderId: followerId, flowId: flow.id });
         } catch (err) {
           console.error(`[FlowEngine] new_follower flow error (follower=${followerId}):`, err.message);
         }
@@ -58,10 +57,11 @@ class FlowEngine {
   // ─── Handle story reply ────────────────────────────────────────────────────
   async handleStoryReply(senderId, event) {
     try {
-      const flow = db.getActiveFlows().find((f) => f.trigger.type === "story_reply");
+      const flows = await db.getActiveFlows();
+      const flow  = flows.find((f) => f.trigger.type === "story_reply");
       if (!flow) return;
       await this.executeFlow(flow, senderId);
-      db.logEvent({ type: "story_reply_dm", senderId, flowId: flow.id });
+      await db.logEvent({ type: "story_reply_dm", senderId, flowId: flow.id });
     } catch (err) {
       console.error(`[FlowEngine] handleStoryReply error (sender=${senderId}):`, err.message);
     }
@@ -74,13 +74,13 @@ class FlowEngine {
       const commenterId = comment?.from?.id;
       if (!commenterId) return;
 
-      const flows = db.getActiveFlows();
+      const flows = await db.getActiveFlows();
       for (const flow of flows) {
         if (flow.trigger.type !== "comment_keyword") continue;
         const keywords = (flow.trigger.keywords || []).map((k) => k.toLowerCase());
         if (keywords.some((kw) => commentText.includes(kw))) {
           await this.executeFlow(flow, commenterId);
-          db.logEvent({ type: "comment_dm", senderId: commenterId, flowId: flow.id });
+          await db.logEvent({ type: "comment_dm", senderId: commenterId, flowId: flow.id });
           return;
         }
       }
@@ -114,7 +114,6 @@ class FlowEngine {
     }
   }
 
-  // Try to send immediately; fall back to queue on any error
   async _sendWithFallback(recipientId, task) {
     try {
       if (task.type === "image") {

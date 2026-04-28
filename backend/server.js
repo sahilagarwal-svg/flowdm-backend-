@@ -19,6 +19,7 @@ const webhookLimiter = rateLimit({
   message:        { error: "Too many requests — slow down" },
 });
 
+const db              = require("./services/db");
 const webhookRouter   = require("./routes/webhook");
 const flowRouter      = require("./routes/flows");
 const analyticsRouter = require("./routes/analytics");
@@ -30,4 +31,6 @@ app.use("/api/analytics",  analyticsRouter);
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`FlowDM backend running on port ${PORT}`));
+db.init()
+  .then(() => app.listen(PORT, () => console.log(`FlowDM backend running on port ${PORT}`)))
+  .catch((err) => { console.error("DB init failed:", err.message); process.exit(1); });

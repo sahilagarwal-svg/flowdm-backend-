@@ -42,12 +42,16 @@ router.post("/", verifyN8nSecret, async (req, res) => {
         const senderId = event.sender?.id;
         if (!senderId) continue;
 
-        if (event.message && !event.message.is_echo) {
+        if (event.postback) {
+          // Button template tap — payload acts as keyword to trigger next flow
+          const payload = event.postback.payload || "";
+          console.log(`[Webhook] Postback from ${senderId}: "${payload}"`);
+          await FlowEngine.handleIncomingDM(senderId, payload);
+        } else if (event.message && !event.message.is_echo) {
           if (event.message.reply_to?.story) {
             console.log(`[Webhook] Story reply from ${senderId}`);
             await FlowEngine.handleStoryReply(senderId, event);
           } else {
-            // quick_reply.payload routes to the next flow by keyword
             const text = event.message.quick_reply?.payload || event.message.text || "";
             console.log(`[Webhook] DM from ${senderId}: "${text}"`);
             await FlowEngine.handleIncomingDM(senderId, text);

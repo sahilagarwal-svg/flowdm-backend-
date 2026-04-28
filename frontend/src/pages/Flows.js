@@ -135,60 +135,95 @@ function StepCard({ step, index, total, onChange, onMoveUp, onMoveDown, onDelete
         })()}
 
         {step.type === 'send_buttons' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Message textarea */}
             <textarea
               value={step.text}
               onChange={e => onChange({ ...step, text: e.target.value })}
               placeholder="Message shown above the buttons..."
-              rows={2}
+              rows={3}
               style={{ ...inp, resize: 'vertical', lineHeight: 1.6 }}
             />
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginTop: 2 }}>
-              BUTTONS (max 13)
-            </div>
-            {step.buttons.map((btn, bi) => (
-              <div key={bi} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input
-                  value={btn.title}
-                  maxLength={20}
-                  onChange={e => {
-                    const title = e.target.value;
-                    const payload = title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-                    const newBtns = step.buttons.map((b, j) => j === bi ? { title, payload } : b);
-                    onChange({ ...step, buttons: newBtns });
-                  }}
-                  placeholder={`Label (max 20 chars)`}
-                  style={{ ...inp, flex: 2 }}
-                />
-                <input
-                  value={btn.payload}
-                  onChange={e => {
-                    const newBtns = step.buttons.map((b, j) => j === bi ? { ...b, payload: e.target.value } : b);
-                    onChange({ ...step, buttons: newBtns });
-                  }}
-                  placeholder="keyword_payload"
-                  style={{ ...inp, flex: 1.5, fontFamily: 'monospace', fontSize: 11 }}
-                />
-                {step.buttons.length > 1 && (
-                  <button
-                    onClick={() => onChange({ ...step, buttons: step.buttons.filter((_, j) => j !== bi) })}
-                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 15, padding: '0 4px', flexShrink: 0 }}
-                  >✕</button>
-                )}
+
+            {/* Instagram-style button preview */}
+            <div style={{
+              background: '#111',
+              borderRadius: 14,
+              padding: '10px 10px 6px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}>
+              <div style={{ fontSize: 10, color: '#555', fontWeight: 600, letterSpacing: '0.06em', marginBottom: 2, paddingLeft: 2 }}>
+                PREVIEW — max 3 buttons, 20 chars each
               </div>
-            ))}
-            {step.buttons.length < 13 && (
-              <button
-                onClick={() => onChange({ ...step, buttons: [...step.buttons, { title: '', payload: '' }] })}
-                style={{
-                  border: '1px dashed var(--border)', borderRadius: 6,
-                  background: 'none', cursor: 'pointer', padding: '6px',
-                  fontSize: 12, color: 'var(--text-muted)', width: '100%',
-                }}
-              >+ Add button</button>
-            )}
+
+              {step.buttons.map((btn, bi) => (
+                <div key={bi}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{
+                      flex: 1,
+                      background: '#1e1e1e',
+                      borderRadius: 10,
+                      border: '1px solid #2a2a2a',
+                      overflow: 'hidden',
+                    }}>
+                      <input
+                        value={btn.title}
+                        maxLength={20}
+                        onChange={e => {
+                          const title = e.target.value;
+                          const payload = title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                          onChange({ ...step, buttons: step.buttons.map((b, j) => j === bi ? { title, payload } : b) });
+                        }}
+                        placeholder={`Button ${bi + 1} label`}
+                        style={{
+                          width: '100%', boxSizing: 'border-box',
+                          textAlign: 'center', fontWeight: 600, fontSize: 14,
+                          padding: '12px 14px', border: 'none',
+                          background: 'transparent', color: '#fff', outline: 'none',
+                        }}
+                      />
+                    </div>
+                    {step.buttons.length > 1 && (
+                      <button
+                        onClick={() => onChange({ ...step, buttons: step.buttons.filter((_, j) => j !== bi) })}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16, padding: '4px 6px', flexShrink: 0 }}
+                      >✕</button>
+                    )}
+                  </div>
+                  {/* Payload field — small, secondary */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 4px 1px' }}>
+                    <span style={{ fontSize: 10, color: '#444' }}>payload:</span>
+                    <input
+                      value={btn.payload}
+                      onChange={e => onChange({ ...step, buttons: step.buttons.map((b, j) => j === bi ? { ...b, payload: e.target.value } : b) })}
+                      placeholder="keyword"
+                      style={{
+                        flex: 1, fontSize: 10, fontFamily: 'monospace',
+                        color: '#666', background: 'transparent',
+                        border: 'none', borderBottom: '1px solid #2a2a2a',
+                        outline: 'none', padding: '1px 2px',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {step.buttons.length < 3 && (
+                <button
+                  onClick={() => onChange({ ...step, buttons: [...step.buttons, { title: '', payload: '' }] })}
+                  style={{
+                    background: 'transparent', border: '1px dashed #333',
+                    borderRadius: 10, padding: '10px', cursor: 'pointer',
+                    fontSize: 12, color: '#555', width: '100%', marginTop: 2,
+                  }}
+                >+ Add button</button>
+              )}
+            </div>
+
             <div style={{ fontSize: 10, color: 'var(--text-faint)', lineHeight: 1.5 }}>
-              Tip: the payload becomes a keyword. Create another flow with that keyword to chain sequences.
+              Tip: payload = keyword for the next flow. e.g. button "Cake Options" → create a flow triggered by keyword "cake_options".
             </div>
           </div>
         )}

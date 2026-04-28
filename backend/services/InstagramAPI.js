@@ -95,24 +95,31 @@ class InstagramAPI {
     }
   }
 
-  // ─── Buttons DM (Quick Replies) ───────────────────────────────────────────────
-  // Instagram limits: max 13 buttons, title max 20 chars each.
-  // When user taps a button, webhook receives quick_reply.payload — matched as keyword.
+  // ─── Buttons DM (Button Template) ────────────────────────────────────────────
+  // Uses button template so buttons appear INSIDE the message bubble (like ManyChat).
+  // Instagram limits: max 3 buttons, title max 20 chars each.
+  // When user taps a button, webhook receives postback.payload — matched as keyword.
   async sendButtonsDM(recipientId, text, buttons) {
     checkRateLimit();
     try {
       const data = await postMessage(this.igAccountId, this.accessToken, {
         recipient: { id: recipientId },
         message: {
-          text,
-          quick_replies: buttons.slice(0, 13).map(b => ({
-            content_type: "text",
-            title: String(b.title).substring(0, 20),
-            payload: b.payload || String(b.title).toLowerCase().replace(/\s+/g, "_"),
-          })),
+          attachment: {
+            type: "template",
+            payload: {
+              template_type: "button",
+              text: String(text).substring(0, 640),
+              buttons: buttons.slice(0, 3).map(b => ({
+                type: "postback",
+                title: String(b.title).substring(0, 20),
+                payload: b.payload || String(b.title).toLowerCase().replace(/\s+/g, "_"),
+              })),
+            },
+          },
         },
       });
-      console.log(`[InstagramAPI] Buttons DM sent → ${recipientId} (msg_id=${data.message_id})`);
+      console.log(`[InstagramAPI] Button template sent → ${recipientId} (msg_id=${data.message_id})`);
       return data;
     } catch (err) {
       console.error(`[InstagramAPI] sendButtonsDM failed → ${recipientId}: ${err.message}`);
