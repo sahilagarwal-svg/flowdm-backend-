@@ -1,8 +1,10 @@
+require("dns").setDefaultResultOrder("ipv4first");
 const { Pool } = require("pg");
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 10000,
 });
 
 async function init() {

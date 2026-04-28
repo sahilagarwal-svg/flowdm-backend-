@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '◉', exact: true },
@@ -12,6 +12,11 @@ const navItems = [
 ];
 
 export default function Sidebar() {
+  const navigate = useNavigate();
+  const logout = () => {
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
   const styles = {
     sidebar: {
       width: 220, flexShrink: 0,
@@ -91,10 +96,14 @@ export default function Sidebar() {
 
       <div style={styles.account}>
         <div style={styles.avatar}>YB</div>
-        <div>
+        <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12, fontWeight: 500 }}>Your Brand</div>
           <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>@yourbrand</div>
         </div>
+        <button onClick={logout} title="Logout" style={{
+          border: 'none', background: 'none', cursor: 'pointer',
+          color: 'var(--text-muted)', fontSize: 16, padding: 4,
+        }}>⏻</button>
       </div>
     </div>
   );

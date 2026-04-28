@@ -5,7 +5,9 @@ require("dotenv").config();
 
 const app = express();
 app.set("trust proxy", 1); // required for express-rate-limit behind Render's proxy
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",") : "*",
+}));
 app.use(express.json());
 
 // Webhook endpoint: allow up to 300 inbound events per 15 minutes.
@@ -20,13 +22,16 @@ const webhookLimiter = rateLimit({
 });
 
 const db              = require("./services/db");
+const requireAuth     = require("./middleware/auth");
+const authRouter      = require("./routes/auth");
 const webhookRouter   = require("./routes/webhook");
 const flowRouter      = require("./routes/flows");
 const analyticsRouter = require("./routes/analytics");
 
+app.use("/api/auth",       authRouter);
 app.use("/webhook",        webhookLimiter, webhookRouter);
-app.use("/api/flows",      flowRouter);
-app.use("/api/analytics",  analyticsRouter);
+app.use("/api/flows",      requireAuth, flowRouter);
+app.use("/api/analytics",  requireAuth, analyticsRouter);
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
