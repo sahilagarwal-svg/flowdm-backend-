@@ -1,8 +1,13 @@
 require("dns").setDefaultResultOrder("ipv4first");
 const { Pool } = require("pg");
 
+const _u = new URL(process.env.DATABASE_URL);
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  host:     _u.hostname,
+  port:     parseInt(_u.port) || 5432,
+  user:     decodeURIComponent(_u.username),
+  password: decodeURIComponent(_u.password),
+  database: _u.pathname.replace(/^\//, ""),
   ssl: { rejectUnauthorized: false },
 });
 
