@@ -69,18 +69,19 @@ function validateFlow(body) {
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    res.json(db.getAllFlows());
+    res.json(await db.getAllFlows());
   } catch (err) {
     console.error("[Flows] GET /:", err.message);
     res.status(500).json({ error: "Failed to load flows" });
   }
 });
 
-router.get("/:id", (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
-    const flow = db.getAllFlows().find((f) => f.id === req.params.id);
+    const flows = await db.getAllFlows();
+    const flow  = flows.find((f) => f.id === req.params.id);
     if (!flow) return res.status(404).json({ error: "Flow not found" });
     res.json(flow);
   } catch (err) {
@@ -89,13 +90,13 @@ router.get("/:id", (req, res) => {
   }
 });
 
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   const errors = validateFlow(req.body);
   if (errors.length) return res.status(400).json({ errors });
 
   try {
     const flow = { id: `flow_${uuid()}`, active: false, ...req.body };
-    db.saveFlow(flow);
+    await db.saveFlow(flow);
     res.status(201).json(flow);
   } catch (err) {
     console.error("[Flows] POST /:", err.message);
@@ -103,12 +104,12 @@ router.post("/", (req, res) => {
   }
 });
 
-router.patch("/:id", (req, res) => {
+router.patch("/:id", async (req, res) => {
   try {
-    const flow = db.getAllFlows().find((f) => f.id === req.params.id);
+    const flows = await db.getAllFlows();
+    const flow  = flows.find((f) => f.id === req.params.id);
     if (!flow) return res.status(404).json({ error: "Flow not found" });
 
-    // Only run full validation when structural fields are being changed
     if (req.body.steps !== undefined || req.body.trigger !== undefined) {
       const merged = { ...flow, ...req.body };
       const errors = validateFlow(merged);
@@ -116,7 +117,7 @@ router.patch("/:id", (req, res) => {
     }
 
     const updated = { ...flow, ...req.body };
-    db.saveFlow(updated);
+    await db.saveFlow(updated);
     res.json(updated);
   } catch (err) {
     console.error("[Flows] PATCH /:id:", err.message);
@@ -124,9 +125,9 @@ router.patch("/:id", (req, res) => {
   }
 });
 
-router.delete("/:id", (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
-    db.deleteFlow(req.params.id);
+    await db.deleteFlow(req.params.id);
     res.json({ success: true });
   } catch (err) {
     console.error("[Flows] DELETE /:id:", err.message);
