@@ -35,7 +35,6 @@ app.use("/webhook",        webhookLimiter, webhookRouter);
 app.use("/api/flows",      requireAuth, flowRouter);
 app.use("/api/analytics",  requireAuth, analyticsRouter);
 app.use("/api/upload",     requireAuth, uploadRouter);
-app.use("/uploads",        express.static(path.join(__dirname, "uploads")));
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
