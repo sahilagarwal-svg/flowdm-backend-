@@ -192,6 +192,34 @@ const db = {
     }));
   },
 
+  async getKeywordStats(clientId = null) {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { rows } = clientId
+      ? await pool.query(
+          "SELECT keyword, COUNT(*) AS count FROM events WHERE keyword IS NOT NULL AND timestamp > $1 AND client_id = $2 GROUP BY keyword ORDER BY count DESC LIMIT 20",
+          [since, clientId])
+      : await pool.query(
+          "SELECT keyword, COUNT(*) AS count FROM events WHERE keyword IS NOT NULL AND timestamp > $1 AND client_id IS NULL GROUP BY keyword ORDER BY count DESC LIMIT 20",
+          [since]);
+    return rows.map(r => ({ keyword: r.keyword, count: Number(r.count) }));
+  },
+
+  async getDailyStats(clientId = null) {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const dmTypes = ["dm_keyword", "new_follower_dm", "story_reply_dm", "comment_dm"];
+    const { rows } = clientId
+      ? await pool.query(
+          "SELECT DATE(timestamp) AS day, COUNT(*) AS count FROM events WHERE timestamp > $1 AND type = ANY($2) AND client_id = $3 GROUP BY DATE(timestamp) ORDER BY day ASC",
+          [since, dmTypes, clientId])
+      : await pool.query(
+          "SELECT DATE(timestamp) AS day, COUNT(*) AS count FROM events WHERE timestamp > $1 AND type = ANY($2) AND client_id IS NULL GROUP BY DATE(timestamp) ORDER BY day ASC",
+          [since, dmTypes]);
+    return rows.map(r => ({
+      day: new Date(r.day).toLocaleDateString('en', { weekday: 'short' }),
+      dms: Number(r.count),
+    }));
+  },
+
   async getStats(clientId = null) {
     const since   = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const dmTypes = ["dm_keyword", "new_follower_dm", "story_reply_dm", "comment_dm"];

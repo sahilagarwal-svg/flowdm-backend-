@@ -26,4 +26,22 @@ router.get("/events", async (req, res) => {
   }
 });
 
+router.get("/keywords", async (req, res) => {
+  try {
+    res.json(await db.getKeywordStats(getClientId(req)));
+  } catch (err) {
+    console.error("[Analytics] GET /keywords:", err.message);
+    res.status(500).json({ error: "Failed to load keyword stats" });
+  }
+});
+
+router.get("/daily", async (req, res) => {
+  try {
+    res.json(await db.getDailyStats(getClientId(req)));
+  } catch (err) {
+    console.error("[Analytics] GET /daily:", err.message);
+    res.status(500).json({ error: "Failed to load daily stats" });
+  }
+});
+
 module.exports = router;
