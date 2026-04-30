@@ -91,10 +91,13 @@ class FlowEngine {
 
   // ─── Execute a flow step by step ──────────────────────────────────────────
   async executeFlow(flow, recipientId) {
+    const profile = await this._fetchProfile(recipientId);
+
     for (const step of flow.steps) {
       try {
         if (step.type === "send_message") {
-          await this._sendWithFallback(recipientId, { type: "text", message: step.message });
+          const message = this._applyVars(step.message, profile);
+          await this._sendWithFallback(recipientId, { type: "text", message });
           await naturalDelay(2000, 5000);
         } else if (step.type === "send_image") {
           await this._sendWithFallback(recipientId, { type: "image", imageUrl: step.imageUrl });
@@ -103,7 +106,8 @@ class FlowEngine {
           await this._sendWithFallback(recipientId, { type: "video", videoUrl: step.videoUrl });
           await naturalDelay(2000, 5000);
         } else if (step.type === "send_buttons") {
-          await this._sendWithFallback(recipientId, { type: "buttons", text: step.text, buttons: step.buttons });
+          const text = this._applyVars(step.text, profile);
+          await this._sendWithFallback(recipientId, { type: "buttons", text, buttons: step.buttons });
           await naturalDelay(2000, 5000);
         } else if (step.type === "delay") {
           await this._sleep(step.ms);
@@ -112,6 +116,25 @@ class FlowEngine {
         console.error(`[FlowEngine] Step "${step.type}" failed for ${recipientId}:`, err.message);
       }
     }
+  }
+
+  // ─── Fetch user profile (silent fail — personalization is best-effort) ─────
+  async _fetchProfile(recipientId) {
+    try {
+      return await InstagramAPI.getUserProfile(recipientId);
+    } catch {
+      return null;
+    }
+  }
+
+  // ─── Replace {{first_name}} / {{name}} in message text ────────────────────
+  _applyVars(text, profile) {
+    if (!text) return text || "";
+    if (!profile) return text;
+    const firstName = (profile.name || "").split(" ")[0] || "";
+    return text
+      .replace(/\{\{first_name\}\}/g, firstName)
+      .replace(/\{\{name\}\}/g,       profile.name || "");
   }
 
   async _sendWithFallback(recipientId, task) {
