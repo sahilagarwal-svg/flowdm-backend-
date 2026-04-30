@@ -16,7 +16,6 @@ function checkRateLimit() {
   sentLog.push(now);
 }
 
-// ─── Shared POST helper ────────────────────────────────────────────────────────
 async function postMessage(accountId, accessToken, body) {
   const res = await fetch(`${BASE}/${accountId}/messages`, {
     method: "POST",
@@ -37,11 +36,19 @@ class InstagramAPI {
     this.igAccountId = process.env.INSTAGRAM_ACCOUNT_ID;
   }
 
-  // ─── Text DM ─────────────────────────────────────────────────────────────────
-  async sendDM(recipientId, text) {
+  // resolve credentials — use client overrides if provided, else fall back to env
+  _creds(client) {
+    return {
+      token:     client?.accessToken  || this.accessToken,
+      accountId: client?.igAccountId  || this.igAccountId,
+    };
+  }
+
+  async sendDM(recipientId, text, client = null) {
     checkRateLimit();
+    const { token, accountId } = this._creds(client);
     try {
-      const data = await postMessage(this.igAccountId, this.accessToken, {
+      const data = await postMessage(accountId, token, {
         recipient: { id: recipientId },
         message: { text },
       });
@@ -53,11 +60,11 @@ class InstagramAPI {
     }
   }
 
-  // ─── Image DM ─────────────────────────────────────────────────────────────────
-  async sendImageDM(recipientId, imageUrl) {
+  async sendImageDM(recipientId, imageUrl, client = null) {
     checkRateLimit();
+    const { token, accountId } = this._creds(client);
     try {
-      const data = await postMessage(this.igAccountId, this.accessToken, {
+      const data = await postMessage(accountId, token, {
         recipient: { id: recipientId },
         message: {
           attachment: {
@@ -74,11 +81,11 @@ class InstagramAPI {
     }
   }
 
-  // ─── Video DM ─────────────────────────────────────────────────────────────────
-  async sendVideoDM(recipientId, videoUrl) {
+  async sendVideoDM(recipientId, videoUrl, client = null) {
     checkRateLimit();
+    const { token, accountId } = this._creds(client);
     try {
-      const data = await postMessage(this.igAccountId, this.accessToken, {
+      const data = await postMessage(accountId, token, {
         recipient: { id: recipientId },
         message: {
           attachment: {
@@ -95,14 +102,11 @@ class InstagramAPI {
     }
   }
 
-  // ─── Buttons DM (Button Template) ────────────────────────────────────────────
-  // Uses button template so buttons appear INSIDE the message bubble (like ManyChat).
-  // Instagram limits: max 3 buttons, title max 20 chars each.
-  // When user taps a button, webhook receives postback.payload — matched as keyword.
-  async sendButtonsDM(recipientId, text, buttons) {
+  async sendButtonsDM(recipientId, text, buttons, client = null) {
     checkRateLimit();
+    const { token, accountId } = this._creds(client);
     try {
-      const data = await postMessage(this.igAccountId, this.accessToken, {
+      const data = await postMessage(accountId, token, {
         recipient: { id: recipientId },
         message: {
           attachment: {
@@ -127,11 +131,11 @@ class InstagramAPI {
     }
   }
 
-  // ─── Get user profile ─────────────────────────────────────────────────────────
-  async getUserProfile(userId) {
+  async getUserProfile(userId, client = null) {
+    const { token } = this._creds(client);
     try {
       const res = await fetch(
-        `${BASE}/${userId}?fields=id,name&access_token=${this.accessToken}`
+        `${BASE}/${userId}?fields=id,name&access_token=${token}`
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
@@ -142,7 +146,6 @@ class InstagramAPI {
     }
   }
 
-  // ─── Get media list ───────────────────────────────────────────────────────────
   async getMedia(limit = 10) {
     try {
       const res = await fetch(
