@@ -10,15 +10,17 @@ const pool = new Pool({
 async function init() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS clients (
-      id            TEXT PRIMARY KEY,
-      name          TEXT NOT NULL,
-      ig_username   TEXT,
-      ig_account_id TEXT,
-      access_token  TEXT,
-      app_secret    TEXT,
-      webhook_token TEXT,
-      created_at    TIMESTAMPTZ DEFAULT NOW()
+      id             TEXT PRIMARY KEY,
+      name           TEXT NOT NULL,
+      ig_username    TEXT,
+      ig_account_id  TEXT,
+      access_token   TEXT,
+      app_secret     TEXT,
+      webhook_token  TEXT,
+      lead_sheet_url TEXT,
+      created_at     TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS lead_sheet_url TEXT;
 
     CREATE TABLE IF NOT EXISTS flows (
       id           TEXT PRIMARY KEY,
@@ -43,6 +45,11 @@ async function init() {
     ALTER TABLE flows  ADD COLUMN IF NOT EXISTS client_id TEXT;
     ALTER TABLE events ADD COLUMN IF NOT EXISTS client_id TEXT;
 
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_events_ts      ON events(timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_flows_active   ON flows(active);
     CREATE INDEX IF NOT EXISTS idx_flows_client   ON flows(client_id);
@@ -64,14 +71,15 @@ function toFlow(row) {
 
 function toClient(row, withToken = false) {
   return {
-    id:            row.id,
-    name:          row.name,
-    igUsername:    row.ig_username,
-    igAccountId:   row.ig_account_id,
-    appSecret:     withToken ? row.app_secret   : undefined,
-    webhookToken:  withToken ? row.webhook_token : undefined,
-    accessToken:   withToken ? row.access_token  : undefined,
-    createdAt:     row.created_at,
+    id:             row.id,
+    name:           row.name,
+    igUsername:     row.ig_username,
+    igAccountId:    row.ig_account_id,
+    appSecret:      withToken ? row.app_secret   : undefined,
+    webhookToken:   withToken ? row.webhook_token : undefined,
+    accessToken:    withToken ? row.access_token  : undefined,
+    leadSheetUrl:   row.lead_sheet_url || null,
+    createdAt:      row.created_at,
   };
 }
 
@@ -97,16 +105,18 @@ const db = {
     if (rows.length > 0) {
       await pool.query(
         `UPDATE clients SET name=$1, ig_username=$2, ig_account_id=$3,
-         access_token=$4, app_secret=$5, webhook_token=$6 WHERE id=$7`,
+         access_token=$4, app_secret=$5, webhook_token=$6, lead_sheet_url=$7 WHERE id=$8`,
         [client.name, client.igUsername, client.igAccountId,
-         client.accessToken, client.appSecret, client.webhookToken, client.id]
+         client.accessToken, client.appSecret, client.webhookToken,
+         client.leadSheetUrl || null, client.id]
       );
     } else {
       await pool.query(
-        `INSERT INTO clients (id, name, ig_username, ig_account_id, access_token, app_secret, webhook_token)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        `INSERT INTO clients (id, name, ig_username, ig_account_id, access_token, app_secret, webhook_token, lead_sheet_url)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [client.id, client.name, client.igUsername, client.igAccountId,
-         client.accessToken, client.appSecret, client.webhookToken]
+         client.accessToken, client.appSecret, client.webhookToken,
+         client.leadSheetUrl || null]
       );
     }
     return client;
@@ -252,6 +262,19 @@ const db = {
     }, {});
 
     return { totalDMs: Number(countRes.rows[0].c), byType };
+  },
+
+  // ─── Settings ────────────────────────────────────────────────────────────────
+  async getSetting(key) {
+    const { rows } = await pool.query("SELECT value FROM settings WHERE key = $1", [key]);
+    return rows.length ? rows[0].value : null;
+  },
+
+  async setSetting(key, value) {
+    await pool.query(
+      "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+      [key, value]
+    );
   },
 
   init,

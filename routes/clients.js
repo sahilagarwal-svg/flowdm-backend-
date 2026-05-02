@@ -27,7 +27,7 @@ router.get("/:id", async (req, res) => {
 
 // POST create client
 router.post("/", async (req, res) => {
-  const { name, igUsername, igAccountId, accessToken, appSecret, webhookToken } = req.body;
+  const { name, igUsername, igAccountId, accessToken, appSecret, webhookToken, leadSheetUrl } = req.body;
   if (!name || !String(name).trim()) {
     return res.status(400).json({ error: "Client name is required" });
   }
@@ -40,6 +40,7 @@ router.post("/", async (req, res) => {
       accessToken:  accessToken  || null,
       appSecret:    appSecret    || null,
       webhookToken: webhookToken || null,
+      leadSheetUrl: leadSheetUrl || null,
     };
     await db.saveClient(client);
     res.status(201).json({ ...client, accessToken: undefined });
@@ -57,12 +58,13 @@ router.patch("/:id", async (req, res) => {
 
     const updated = {
       id:           existing.id,
-      name:         req.body.name         ?? existing.name,
-      igUsername:   req.body.igUsername   ?? existing.igUsername,
-      igAccountId:  req.body.igAccountId  ?? existing.igAccountId,
-      accessToken:  req.body.accessToken  ?? existing.accessToken,
-      appSecret:    req.body.appSecret    ?? existing.appSecret,
-      webhookToken: req.body.webhookToken ?? existing.webhookToken,
+      name:         req.body.name          ?? existing.name,
+      igUsername:   req.body.igUsername    ?? existing.igUsername,
+      igAccountId:  req.body.igAccountId   ?? existing.igAccountId,
+      accessToken:  req.body.accessToken   ?? existing.accessToken,
+      appSecret:    req.body.appSecret     ?? existing.appSecret,
+      webhookToken: req.body.webhookToken  ?? existing.webhookToken,
+      leadSheetUrl: req.body.leadSheetUrl  ?? existing.leadSheetUrl,
     };
     await db.saveClient(updated);
     res.json({ ...updated, accessToken: undefined });

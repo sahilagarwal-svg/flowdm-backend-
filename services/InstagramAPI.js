@@ -135,7 +135,7 @@ class InstagramAPI {
     const { token } = this._creds(client);
     try {
       const res = await fetch(
-        `${BASE}/${userId}?fields=id,name&access_token=${token}`
+        `${BASE}/${userId}?fields=id,name,username,profile_pic&access_token=${token}`
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);

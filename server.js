@@ -27,6 +27,7 @@ const flowRouter      = require("./routes/flows");
 const analyticsRouter = require("./routes/analytics");
 const uploadRouter    = require("./routes/upload");
 const clientsRouter   = require("./routes/clients");
+const settingsRouter  = require("./routes/settings");
 
 app.use("/api/auth",      authRouter);
 app.use("/webhook",       webhookLimiter, webhookRouter);
@@ -34,8 +35,10 @@ app.use("/api/flows",     requireAuth, flowRouter);
 app.use("/api/analytics", requireAuth, analyticsRouter);
 app.use("/api/upload",    requireAuth, uploadRouter);
 app.use("/api/clients",   requireAuth, clientsRouter);
+app.use("/api/settings",  requireAuth, settingsRouter);
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
 
 const PORT = process.env.PORT || 3001;
 db.init()

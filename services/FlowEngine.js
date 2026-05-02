@@ -1,6 +1,7 @@
-const InstagramAPI = require("./InstagramAPI");
-const MessageQueue = require("./MessageQueue");
-const db           = require("./db");
+const InstagramAPI  = require("./InstagramAPI");
+const MessageQueue  = require("./MessageQueue");
+const db            = require("./db");
+const { appendLead, extractPhoneNumber } = require("./googleSheets");
 
 function naturalDelay(minMs = 2000, maxMs = 5000) {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
@@ -14,6 +15,18 @@ class FlowEngine {
       const clientId  = client?.id || null;
       const lowerText = (text || "").toLowerCase().trim();
       const flows     = await db.getActiveFlows(clientId);
+
+      // Phone number lead capture — runs independently of flows
+      const phone = extractPhoneNumber(text);
+      if (phone) {
+        const sheetUrl = client?.leadSheetUrl ||
+          (client === null ? await db.getSetting("default_lead_sheet_url") : null);
+        if (sheetUrl) {
+          this._captureLeadToSheet(senderId, text, phone, client, sheetUrl).catch(err =>
+            console.error("[FlowEngine] Lead capture error:", err.message)
+          );
+        }
+      }
 
       for (const flow of flows) {
         if (flow.trigger.type !== "keyword") continue;
@@ -34,6 +47,21 @@ class FlowEngine {
     } catch (err) {
       console.error(`[FlowEngine] handleIncomingDM error (sender=${senderId}):`, err.message);
     }
+  }
+
+  // ─── Capture phone lead to Google Sheet ───────────────────────────────────
+  async _captureLeadToSheet(senderId, text, phone, client, sheetUrl) {
+    const profile = await this._fetchProfile(senderId, client).catch(() => null);
+    await appendLead(sheetUrl, {
+      phoneRaw:         phone.raw,
+      phoneNormalized:  phone.normalized,
+      name:             profile?.name     || "",
+      username:         profile?.username || "",
+      igUserId:         senderId,
+      messageText:      text,
+      source:           "Instagram DM",
+    });
+    await db.logEvent({ type: "lead_captured", senderId, clientId: client?.id || null });
   }
 
   // ─── Handle new follower ───────────────────────────────────────────────────
