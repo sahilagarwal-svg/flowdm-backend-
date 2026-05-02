@@ -1,7 +1,11 @@
 const { google } = require("googleapis");
 const path = require("path");
 
-const CREDENTIALS_PATH = path.join(__dirname, "../config/google-credentials.json");
+// Render places secret files at /etc/secrets/<filename>; fallback to local config
+const CREDENTIALS_PATH =
+  require("fs").existsSync("/etc/secrets/google-credentials.json")
+    ? "/etc/secrets/google-credentials.json"
+    : path.join(__dirname, "../config/google-credentials.json");
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 const HEADERS = [
   "Timestamp (IST)",
