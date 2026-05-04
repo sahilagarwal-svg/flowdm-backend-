@@ -140,7 +140,10 @@ class InstagramAPI {
     try {
       const elements = cards.slice(0, 10).map(card => {
         const el = { title: String(card.title || "Card").substring(0, 80) };
-        if (card.imageUrl) el.image_url = card.imageUrl;
+        if (card.imageUrl) {
+          el.image_url = card.imageUrl;
+          el.default_action = { type: "web_url", url: card.imageUrl, webview_height_ratio: "tall" };
+        }
         if (card.subtitle) el.subtitle  = String(card.subtitle).substring(0, 80);
         if (card.buttons?.length) {
           el.buttons = card.buttons.slice(0, 3).map(b => ({
