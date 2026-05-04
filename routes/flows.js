@@ -4,7 +4,7 @@ const { v4: uuid } = require("uuid");
 const db      = require("../services/db");
 
 const VALID_TRIGGERS = ["keyword", "new_follower", "any_dm", "story_reply", "comment_keyword"];
-const VALID_STEPS    = ["send_message", "send_image", "send_video", "send_buttons", "delay"];
+const VALID_STEPS    = ["send_message", "send_image", "send_video", "send_buttons", "delay", "send_carousel"];
 
 function getClientId(req) {
   const h = req.headers["x-client-id"];
