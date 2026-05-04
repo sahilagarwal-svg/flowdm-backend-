@@ -131,15 +131,12 @@ class InstagramAPI {
     }
   }
 
-<<<<<<< HEAD
-  async getUserProfile(userId, client = null) {
-    const { token } = this._creds(client);
-=======
   // ─── Carousel DM (Generic Template) ──────────────────────────────────────────
   // Sends a horizontal swipeable carousel. Each card: image, title, subtitle, buttons.
   // Instagram limits: max 10 cards, title max 80 chars, max 3 buttons per card.
-  async sendCarouselDM(recipientId, cards) {
+  async sendCarouselDM(recipientId, cards, client = null) {
     checkRateLimit();
+    const { token, accountId } = this._creds(client);
     try {
       const elements = cards.slice(0, 10).map(card => {
         const el = { title: String(card.title || "Card").substring(0, 80) };
@@ -154,7 +151,7 @@ class InstagramAPI {
         }
         return el;
       });
-      const data = await postMessage(this.igAccountId, this.accessToken, {
+      const data = await postMessage(accountId, token, {
         recipient: { id: recipientId },
         message: {
           attachment: {
@@ -172,8 +169,8 @@ class InstagramAPI {
   }
 
   // ─── Get user profile ─────────────────────────────────────────────────────────
-  async getUserProfile(userId) {
->>>>>>> harish
+  async getUserProfile(userId, client = null) {
+    const { token } = this._creds(client);
     try {
       const res = await fetch(
         `${BASE}/${userId}?fields=id,name,username,profile_pic&access_token=${token}`
