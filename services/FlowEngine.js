@@ -142,6 +142,9 @@ class FlowEngine {
           const text = this._applyVars(step.text, profile);
           await this._sendWithFallback(recipientId, { type: "buttons", text, buttons: step.buttons }, client);
           await naturalDelay(2000, 5000);
+        } else if (step.type === "send_carousel") {
+          await this._sendWithFallback(recipientId, { type: "carousel", cards: step.cards });
+          await naturalDelay(2000, 5000);
         } else if (step.type === "delay") {
           await this._sleep(step.ms);
         }
@@ -185,6 +188,28 @@ class FlowEngine {
       .replace(/\{\{name\}\}/g,       profile.name || "");
   }
 
+<<<<<<< HEAD
+=======
+  async _sendWithFallback(recipientId, task) {
+    try {
+      if (task.type === "image") {
+        await InstagramAPI.sendImageDM(recipientId, task.imageUrl);
+      } else if (task.type === "video") {
+        await InstagramAPI.sendVideoDM(recipientId, task.videoUrl);
+      } else if (task.type === "buttons") {
+        await InstagramAPI.sendButtonsDM(recipientId, task.text, task.buttons);
+      } else if (task.type === "carousel") {
+        await InstagramAPI.sendCarouselDM(recipientId, task.cards);
+      } else {
+        await InstagramAPI.sendDM(recipientId, task.message);
+      }
+    } catch (err) {
+      console.warn(`[FlowEngine] Direct send failed, enqueuing for retry — ${err.message}`);
+      MessageQueue.enqueue({ ...task, recipientId });
+    }
+  }
+
+>>>>>>> harish
   _sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }

@@ -131,8 +131,49 @@ class InstagramAPI {
     }
   }
 
+<<<<<<< HEAD
   async getUserProfile(userId, client = null) {
     const { token } = this._creds(client);
+=======
+  // ─── Carousel DM (Generic Template) ──────────────────────────────────────────
+  // Sends a horizontal swipeable carousel. Each card: image, title, subtitle, buttons.
+  // Instagram limits: max 10 cards, title max 80 chars, max 3 buttons per card.
+  async sendCarouselDM(recipientId, cards) {
+    checkRateLimit();
+    try {
+      const elements = cards.slice(0, 10).map(card => {
+        const el = { title: String(card.title || "Card").substring(0, 80) };
+        if (card.imageUrl) el.image_url = card.imageUrl;
+        if (card.subtitle) el.subtitle  = String(card.subtitle).substring(0, 80);
+        if (card.buttons?.length) {
+          el.buttons = card.buttons.slice(0, 3).map(b => ({
+            type:    "postback",
+            title:   String(b.title).substring(0, 20),
+            payload: b.payload || String(b.title).toLowerCase().replace(/\s+/g, "_"),
+          }));
+        }
+        return el;
+      });
+      const data = await postMessage(this.igAccountId, this.accessToken, {
+        recipient: { id: recipientId },
+        message: {
+          attachment: {
+            type: "template",
+            payload: { template_type: "generic", elements },
+          },
+        },
+      });
+      console.log(`[InstagramAPI] Carousel sent → ${recipientId} (msg_id=${data.message_id})`);
+      return data;
+    } catch (err) {
+      console.error(`[InstagramAPI] sendCarouselDM failed → ${recipientId}: ${err.message}`);
+      throw err;
+    }
+  }
+
+  // ─── Get user profile ─────────────────────────────────────────────────────────
+  async getUserProfile(userId) {
+>>>>>>> harish
     try {
       const res = await fetch(
         `${BASE}/${userId}?fields=id,name,username,profile_pic&access_token=${token}`
