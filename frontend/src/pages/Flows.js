@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Card, Toggle, Btn, EmptyState, Badge } from '../components/UI';
 import { flowsAPI } from '../services/api';
 
@@ -11,11 +11,12 @@ const TRIGGER_TYPES = [
 ];
 
 const STEP_TYPES = [
-  { value: 'send_message', label: 'Text Message',          icon: '💬' },
-  { value: 'send_image',   label: 'Image',                 icon: '🖼️' },
-  { value: 'send_video',   label: 'Video',                 icon: '🎥' },
-  { value: 'delay',        label: 'Time Delay',            icon: '⏱️' },
-  { value: 'send_buttons', label: 'Quick Reply Buttons',   icon: '🔘' },
+  { value: 'send_message',  label: 'Text Message',          icon: '💬' },
+  { value: 'send_image',    label: 'Image',                 icon: '🖼️' },
+  { value: 'send_video',    label: 'Video',                 icon: '🎥' },
+  { value: 'delay',         label: 'Time Delay',            icon: '⏱️' },
+  { value: 'send_buttons',  label: 'Quick Reply Buttons',   icon: '🔘' },
+  { value: 'send_carousel', label: 'Carousel (Swipeable)',  icon: '🎠' },
 ];
 
 const TRIGGER_COLOR = {
@@ -35,18 +36,131 @@ function delayToMs(value, unit) {
 
 function newStep(type) {
   switch (type) {
-    case 'send_message': return { type, message: '' };
-    case 'send_image':   return { type, imageUrl: '' };
-    case 'send_video':   return { type, videoUrl: '' };
-    case 'delay':        return { type, ms: 30000 };
-    case 'send_buttons': return { type, text: '', buttons: [{ title: '', payload: '' }] };
-    default:             return { type };
+    case 'send_message':  return { type, message: '' };
+    case 'send_image':    return { type, imageUrl: '' };
+    case 'send_video':    return { type, videoUrl: '' };
+    case 'delay':         return { type, ms: 30000 };
+    case 'send_buttons':  return { type, text: '', buttons: [{ title: '', payload: '' }] };
+    case 'send_carousel': return { type, cards: [{ title: '', subtitle: '', imageUrl: '', buttons: [] }] };
+    default:              return { type };
   }
 }
 
+function newCarouselCard() {
+  return { title: '', subtitle: '', imageUrl: '', buttons: [] };
+}
+
+// ─── MediaUploadField ──────────────────────────────────────────────────────────
+function MediaUploadField({ value, onChange, inp, accept, placeholder, type }) {
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const token   = localStorage.getItem('token');
+      const baseUrl = process.env.REACT_APP_API_URL || '/api';
+      const res     = await fetch(`${baseUrl}/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.url) onChange(data.url);
+      else alert('Upload failed: ' + (data.error || 'unknown'));
+    } catch {
+      alert('Upload failed');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input
+          type="url"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          style={{ ...inp, flex: 1 }}
+        />
+        <label style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '7px 12px', borderRadius: 6, cursor: uploading ? 'not-allowed' : 'pointer',
+          border: '1px solid var(--border)', fontSize: 12, whiteSpace: 'nowrap',
+          background: 'var(--bg)', color: uploading ? 'var(--text-faint)' : 'var(--text-muted)',
+          flexShrink: 0,
+        }}>
+          {uploading ? '⏳ Uploading…' : '📁 Upload'}
+          <input type="file" accept={accept} style={{ display: 'none' }} onChange={handleFile} disabled={uploading} />
+        </label>
+      </div>
+      {value && type === 'image' && (
+        <img
+          src={value} alt="preview"
+          style={{ height: 80, borderRadius: 6, objectFit: 'cover', border: '1px solid var(--border)', alignSelf: 'flex-start' }}
+          onError={e => { e.target.style.display = 'none'; }}
+        />
+      )}
+      {value && type === 'video' && (
+        <video
+          src={value} controls
+          style={{ height: 80, borderRadius: 6, border: '1px solid var(--border)', alignSelf: 'flex-start' }}
+        />
+      )}
+    </div>
+  );
+}
+
+const VAR_TAGS = [
+  { label: '+ First Name', val: '{{first_name}}' },
+  { label: '+ Full Name',  val: '{{name}}' },
+];
+
 // ─── StepCard ──────────────────────────────────────────────────────────────────
 function StepCard({ step, index, total, onChange, onMoveUp, onMoveDown, onDelete }) {
-  const info = STEP_TYPES.find(t => t.value === step.type) || {};
+  const info    = STEP_TYPES.find(t => t.value === step.type) || {};
+  const textRef = useRef(null);
+
+  const insertVar = (varStr, field) => {
+    const el = textRef.current;
+    if (!el) {
+      onChange({ ...step, [field]: (step[field] || '') + varStr });
+      return;
+    }
+    const start  = el.selectionStart;
+    const end    = el.selectionEnd;
+    const newVal = el.value.slice(0, start) + varStr + el.value.slice(end);
+    onChange({ ...step, [field]: newVal });
+    setTimeout(() => {
+      el.selectionStart = el.selectionEnd = start + varStr.length;
+      el.focus();
+    }, 0);
+  };
+
+  const VarButtons = ({ field }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Insert:</span>
+      {VAR_TAGS.map(v => (
+        <button
+          key={v.val}
+          type="button"
+          onClick={() => insertVar(v.val, field)}
+          style={{
+            border: '1px solid var(--border)', borderRadius: 5,
+            background: 'var(--bg)', cursor: 'pointer',
+            padding: '2px 8px', fontSize: 11,
+            color: '#e1306c',
+          }}
+        >{v.label}</button>
+      ))}
+    </div>
+  );
 
   const inp = {
     padding: '7px 10px', borderRadius: 6,
@@ -84,32 +198,38 @@ function StepCard({ step, index, total, onChange, onMoveUp, onMoveDown, onDelete
 
       <div style={{ padding: 12 }}>
         {step.type === 'send_message' && (
-          <textarea
-            value={step.message}
-            onChange={e => onChange({ ...step, message: e.target.value })}
-            placeholder="Type your message..."
-            rows={3}
-            style={{ ...inp, resize: 'vertical', lineHeight: 1.6 }}
-          />
+          <div>
+            <textarea
+              ref={textRef}
+              value={step.message}
+              onChange={e => onChange({ ...step, message: e.target.value })}
+              placeholder="Type your message..."
+              rows={3}
+              style={{ ...inp, resize: 'vertical', lineHeight: 1.6 }}
+            />
+            <VarButtons field="message" />
+          </div>
         )}
 
         {step.type === 'send_image' && (
-          <input
-            type="url"
+          <MediaUploadField
             value={step.imageUrl}
-            onChange={e => onChange({ ...step, imageUrl: e.target.value })}
+            onChange={url => onChange({ ...step, imageUrl: url })}
+            inp={inp}
+            accept="image/*"
             placeholder="https://example.com/image.jpg"
-            style={inp}
+            type="image"
           />
         )}
 
         {step.type === 'send_video' && (
-          <input
-            type="url"
+          <MediaUploadField
             value={step.videoUrl}
-            onChange={e => onChange({ ...step, videoUrl: e.target.value })}
+            onChange={url => onChange({ ...step, videoUrl: url })}
+            inp={inp}
+            accept="video/*"
             placeholder="https://example.com/video.mp4"
-            style={inp}
+            type="video"
           />
         )}
 
@@ -134,16 +254,113 @@ function StepCard({ step, index, total, onChange, onMoveUp, onMoveDown, onDelete
           );
         })()}
 
+        {step.type === 'send_carousel' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+              Max 10 cards · each card: image + title + subtitle + up to 3 buttons
+            </div>
+
+            {/* Cards */}
+            {step.cards.map((card, ci) => (
+              <div key={ci} style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                {/* Card header */}
+                <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', flex: 1 }}>Card {ci + 1}</span>
+                  {step.cards.length > 1 && (
+                    <button
+                      onClick={() => onChange({ ...step, cards: step.cards.filter((_, j) => j !== ci) })}
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 14, padding: '2px 6px' }}
+                    >✕</button>
+                  )}
+                </div>
+
+                <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {/* Image */}
+                  <MediaUploadField
+                    value={card.imageUrl}
+                    onChange={url => onChange({ ...step, cards: step.cards.map((c, j) => j === ci ? { ...c, imageUrl: url } : c) })}
+                    inp={inp}
+                    accept="image/*"
+                    placeholder="Image URL (recommended)"
+                    type="image"
+                  />
+
+                  {/* Title */}
+                  <input
+                    value={card.title}
+                    maxLength={80}
+                    onChange={e => onChange({ ...step, cards: step.cards.map((c, j) => j === ci ? { ...c, title: e.target.value } : c) })}
+                    placeholder="Card title (required, max 80 chars)"
+                    style={inp}
+                  />
+
+                  {/* Subtitle */}
+                  <input
+                    value={card.subtitle}
+                    maxLength={80}
+                    onChange={e => onChange({ ...step, cards: step.cards.map((c, j) => j === ci ? { ...c, subtitle: e.target.value } : c) })}
+                    placeholder="Subtitle (optional, max 80 chars)"
+                    style={inp}
+                  />
+
+                  {/* Buttons */}
+                  {card.buttons.map((btn, bi) => (
+                    <div key={bi} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        value={btn.title}
+                        maxLength={20}
+                        onChange={e => {
+                          const title = e.target.value;
+                          const payload = title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                          onChange({ ...step, cards: step.cards.map((c, j) => j === ci ? { ...c, buttons: c.buttons.map((b, k) => k === bi ? { title, payload } : b) } : c) });
+                        }}
+                        placeholder={`Button ${bi + 1} (max 20 chars)`}
+                        style={{ ...inp, flex: 1 }}
+                      />
+                      <button
+                        onClick={() => onChange({ ...step, cards: step.cards.map((c, j) => j === ci ? { ...c, buttons: c.buttons.filter((_, k) => k !== bi) } : c) })}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16, padding: '4px 6px', flexShrink: 0 }}
+                      >✕</button>
+                    </div>
+                  ))}
+                  {card.buttons.length < 3 && (
+                    <button
+                      onClick={() => onChange({ ...step, cards: step.cards.map((c, j) => j === ci ? { ...c, buttons: [...c.buttons, { title: '', payload: '' }] } : c) })}
+                      style={{ background: 'transparent', border: '1px dashed var(--border)', borderRadius: 6, padding: '6px', cursor: 'pointer', fontSize: 11, color: 'var(--text-faint)', width: '100%' }}
+                    >+ Add button to card</button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Add card */}
+            {step.cards.length < 10 && (
+              <button
+                onClick={() => onChange({ ...step, cards: [...step.cards, newCarouselCard()] })}
+                style={{ background: 'transparent', border: '2px dashed var(--border)', borderRadius: 10, padding: '10px', cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}
+              >+ Add card</button>
+            )}
+
+            <div style={{ fontSize: 10, color: 'var(--text-faint)', lineHeight: 1.5 }}>
+              Tip: Button payload = keyword for next flow. e.g. button "View Price" → create a flow triggered by "view_price"
+            </div>
+          </div>
+        )}
+
         {step.type === 'send_buttons' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {/* Message textarea */}
-            <textarea
-              value={step.text}
-              onChange={e => onChange({ ...step, text: e.target.value })}
-              placeholder="Message shown above the buttons..."
-              rows={3}
-              style={{ ...inp, resize: 'vertical', lineHeight: 1.6 }}
-            />
+            <div>
+              <textarea
+                ref={textRef}
+                value={step.text}
+                onChange={e => onChange({ ...step, text: e.target.value })}
+                placeholder="Message shown above the buttons..."
+                rows={3}
+                style={{ ...inp, resize: 'vertical', lineHeight: 1.6 }}
+              />
+              <VarButtons field="text" />
+            </div>
 
             {/* Instagram-style button preview */}
             <div style={{

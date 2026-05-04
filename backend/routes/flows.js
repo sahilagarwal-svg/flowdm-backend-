@@ -4,9 +4,13 @@ const { v4: uuid } = require("uuid");
 const db      = require("../services/db");
 
 const VALID_TRIGGERS = ["keyword", "new_follower", "any_dm", "story_reply", "comment_keyword"];
-const VALID_STEPS    = ["send_message", "send_image", "send_video", "send_buttons", "delay"];
+const VALID_STEPS    = ["send_message", "send_image", "send_video", "send_buttons", "delay", "send_carousel"];
 
-// ─── Validation ───────────────────────────────────────────────────────────────
+function getClientId(req) {
+  const h = req.headers["x-client-id"];
+  return h && h !== "null" && h !== "undefined" ? h : null;
+}
+
 function validateFlow(body) {
   const errors = [];
 
@@ -31,36 +35,29 @@ function validateFlow(body) {
   } else {
     body.steps.forEach((step, i) => {
       if (!VALID_STEPS.includes(step.type)) {
-        errors.push(`steps[${i}].type "${step.type}" is invalid — must be one of: ${VALID_STEPS.join(", ")}`);
+        errors.push(`steps[${i}].type "${step.type}" is invalid`);
       } else if (step.type === "send_message") {
-        if (!step.message || !String(step.message).trim()) {
+        if (!step.message || !String(step.message).trim())
           errors.push(`steps[${i}].message must not be empty`);
-        }
       } else if (step.type === "send_image") {
-        if (!step.imageUrl || !String(step.imageUrl).trim()) {
+        if (!step.imageUrl || !String(step.imageUrl).trim())
           errors.push(`steps[${i}].imageUrl must not be empty`);
-        }
       } else if (step.type === "send_video") {
-        if (!step.videoUrl || !String(step.videoUrl).trim()) {
+        if (!step.videoUrl || !String(step.videoUrl).trim())
           errors.push(`steps[${i}].videoUrl must not be empty`);
-        }
       } else if (step.type === "send_buttons") {
-        if (!step.text || !String(step.text).trim()) {
+        if (!step.text || !String(step.text).trim())
           errors.push(`steps[${i}].text must not be empty`);
-        }
-        if (!Array.isArray(step.buttons) || step.buttons.length === 0 || step.buttons.length > 3) {
-          errors.push(`steps[${i}].buttons must have 1–3 buttons (Instagram button template limit)`);
-        } else {
+        if (!Array.isArray(step.buttons) || step.buttons.length === 0 || step.buttons.length > 3)
+          errors.push(`steps[${i}].buttons must have 1–3 buttons`);
+        else
           step.buttons.forEach((btn, j) => {
-            if (!btn.title || !String(btn.title).trim()) {
+            if (!btn.title || !String(btn.title).trim())
               errors.push(`steps[${i}].buttons[${j}].title must not be empty`);
-            }
           });
-        }
       } else if (step.type === "delay") {
-        if (typeof step.ms !== "number" || step.ms < 0) {
+        if (typeof step.ms !== "number" || step.ms < 0)
           errors.push(`steps[${i}].ms must be a non-negative number`);
-        }
       }
     });
   }
@@ -68,10 +65,9 @@ function validateFlow(body) {
   return errors;
 }
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
 router.get("/", async (req, res) => {
   try {
-    res.json(await db.getAllFlows());
+    res.json(await db.getAllFlows(getClientId(req)));
   } catch (err) {
     console.error("[Flows] GET /:", err.message);
     res.status(500).json({ error: "Failed to load flows" });
@@ -80,7 +76,7 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
-    const flows = await db.getAllFlows();
+    const flows = await db.getAllFlows(getClientId(req));
     const flow  = flows.find((f) => f.id === req.params.id);
     if (!flow) return res.status(404).json({ error: "Flow not found" });
     res.json(flow);
@@ -95,7 +91,12 @@ router.post("/", async (req, res) => {
   if (errors.length) return res.status(400).json({ errors });
 
   try {
-    const flow = { id: `flow_${uuid()}`, active: false, ...req.body };
+    const flow = {
+      id:       `flow_${uuid()}`,
+      active:   false,
+      clientId: getClientId(req),
+      ...req.body,
+    };
     await db.saveFlow(flow);
     res.status(201).json(flow);
   } catch (err) {
@@ -106,7 +107,7 @@ router.post("/", async (req, res) => {
 
 router.patch("/:id", async (req, res) => {
   try {
-    const flows = await db.getAllFlows();
+    const flows = await db.getAllFlows(getClientId(req));
     const flow  = flows.find((f) => f.id === req.params.id);
     if (!flow) return res.status(404).json({ error: "Flow not found" });
 

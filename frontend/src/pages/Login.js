@@ -18,7 +18,10 @@ export default function Login() {
     try {
       const { data } = await axios.post(`${API}/auth/login`, { username, password });
       localStorage.setItem('token', data.token);
-      navigate('/');
+      localStorage.removeItem('activeClientId');
+      localStorage.removeItem('activeClientName');
+      localStorage.removeItem('activeClientUser');
+      navigate('/clients');
     } catch {
       setError('Invalid username or password');
     } finally {

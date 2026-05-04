@@ -5,8 +5,10 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const token    = localStorage.getItem('token');
+  const clientId = localStorage.getItem('activeClientId');
+  if (token)    config.headers.Authorization  = `Bearer ${token}`;
+  if (clientId) config.headers['X-Client-Id'] = clientId;
   return config;
 });
 
@@ -15,7 +17,7 @@ api.interceptors.response.use(
   err => {
     if (err.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/instaauto/login';
+      window.location.href = (process.env.REACT_APP_BASENAME || '/instaauto') + '/login';
     }
     return Promise.reject(err);
   }
@@ -30,6 +32,10 @@ export const flowsAPI = {
 };
 
 export const analyticsAPI = {
-  getStats: () => api.get('/analytics/stats').then(r => r.data),
-  getEvents: (limit = 50) => api.get(`/analytics/events?limit=${limit}`).then(r => r.data),
+  getStats:    () => api.get('/analytics/stats').then(r => r.data),
+  getEvents:   (limit = 50) => api.get(`/analytics/events?limit=${limit}`).then(r => r.data),
+  getKeywords: () => api.get('/analytics/keywords').then(r => r.data),
+  getDaily:    () => api.get('/analytics/daily').then(r => r.data),
 };
+
+export default api;

@@ -9,14 +9,13 @@ export default function Dashboard() {
   const [flows, setFlows] = useState([]);
   const [stats, setStats] = useState(null);
   const [events, setEvents] = useState([]);
-  const [chartData] = useState(
-    DAYS.map(d => ({ day: d, dms: Math.floor(Math.random() * 200) + 50 }))
-  );
+  const [dailyStats, setDailyStats] = useState([]);
 
   useEffect(() => {
     flowsAPI.getAll().then(setFlows).catch(() => {});
     analyticsAPI.getStats().then(setStats).catch(() => {});
     analyticsAPI.getEvents(6).then(setEvents).catch(() => {});
+    analyticsAPI.getDaily().then(setDailyStats).catch(() => {});
   }, []);
 
   const toggleFlow = async (id, current) => {
@@ -24,8 +23,17 @@ export default function Dashboard() {
     setFlows(prev => prev.map(f => f.id === id ? { ...f, active: !current } : f));
   };
 
+  const chartData = dailyStats.length > 0
+    ? dailyStats
+    : DAYS.map(d => ({ day: d, dms: 0 }));
+
   const typeColor = { dm_keyword: 'pink', new_follower_dm: 'blue', story_reply_dm: 'orange', comment_dm: 'purple' };
   const typeLabel = { dm_keyword: 'Keyword DM', new_follower_dm: 'Follower DM', story_reply_dm: 'Story DM', comment_dm: 'Comment DM' };
+
+  const triggerKeywords = (flow) => {
+    const kws = flow.trigger?.keywords || (flow.trigger?.keyword ? [flow.trigger.keyword] : []);
+    return kws.filter(Boolean);
+  };
 
   return (
     <div style={{ padding: 24 }}>
@@ -60,23 +68,34 @@ export default function Dashboard() {
         <Card>
           <CardHeader title="Active flows" action={<a href="/flows">View all</a>} />
           <div style={{ padding: 8 }}>
-            {flows.slice(0, 5).map(flow => (
-              <div key={flow.id} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 8px', borderRadius: 6,
-              }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  background: '#fce7f3', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', fontSize: 14,
-                }}>💬</div>
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{flow.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>Trigger: {flow.trigger?.type}</div>
+            {flows.slice(0, 5).map(flow => {
+              const kws = triggerKeywords(flow);
+              return (
+                <div key={flow.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 8px', borderRadius: 6,
+                }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: '#fce7f3', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', fontSize: 14,
+                  }}>💬</div>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{flow.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+                      <span>Trigger: {flow.trigger?.type}</span>
+                      {kws.map(kw => (
+                        <span key={kw} style={{
+                          background: '#fce7f3', color: '#e1306c',
+                          padding: '1px 6px', borderRadius: 10, fontSize: 10, fontWeight: 600,
+                        }}>#{kw}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <Toggle on={flow.active} onChange={() => toggleFlow(flow.id, flow.active)} />
                 </div>
-                <Toggle on={flow.active} onChange={() => toggleFlow(flow.id, flow.active)} />
-              </div>
-            ))}
+              );
+            })}
             {flows.length === 0 && (
               <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                 No flows yet — <a href="/flows" style={{ color: 'var(--accent)' }}>create one</a>
@@ -108,7 +127,15 @@ export default function Dashboard() {
                   {ev.senderId?.slice(0, 2).toUpperCase() || '??'}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12 }}>{ev.type?.replace(/_/g, ' ')}</div>
+                  <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                    <span>{ev.type?.replace(/_/g, ' ')}</span>
+                    {ev.keyword && (
+                      <span style={{
+                        background: '#fce7f3', color: '#e1306c',
+                        padding: '1px 5px', borderRadius: 10, fontSize: 10, fontWeight: 600,
+                      }}>#{ev.keyword}</span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
                     {new Date(ev.timestamp).toLocaleTimeString()}
                   </div>

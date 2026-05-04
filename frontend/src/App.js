@@ -6,24 +6,34 @@ import Flows from './pages/Flows';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import Clients from './pages/Clients';
 import { Keywords, StoryReplies, CommentDMs } from './pages/Other';
 
-function ProtectedLayout() {
-  if (!localStorage.getItem('token')) {
-    return <Navigate to="/login" replace />;
-  }
+function requireAuth() {
+  return !!localStorage.getItem('token');
+}
+
+// Clients portal — fullscreen, no sidebar
+function ClientsRoute() {
+  if (!requireAuth()) return <Navigate to="/login" replace />;
+  return <Clients />;
+}
+
+// Main workspace — has sidebar
+function WorkspaceLayout() {
+  if (!requireAuth()) return <Navigate to="/login" replace />;
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
       <div style={{ flex: 1, overflowY: 'auto' }}>
         <Routes>
-          <Route path="/"             element={<Dashboard />} />
-          <Route path="/flows"        element={<Flows />} />
-          <Route path="/keywords"     element={<Keywords />} />
+          <Route path="/"              element={<Dashboard />} />
+          <Route path="/flows"         element={<Flows />} />
+          <Route path="/keywords"      element={<Keywords />} />
           <Route path="/story-replies" element={<StoryReplies />} />
-          <Route path="/comment-dms"  element={<CommentDMs />} />
-          <Route path="/analytics"    element={<Analytics />} />
-          <Route path="/settings"     element={<Settings />} />
+          <Route path="/comment-dms"   element={<CommentDMs />} />
+          <Route path="/analytics"     element={<Analytics />} />
+          <Route path="/settings"      element={<Settings />} />
         </Routes>
       </div>
     </div>
@@ -32,10 +42,11 @@ function ProtectedLayout() {
 
 export default function App() {
   return (
-    <BrowserRouter basename="/instaauto">
+    <BrowserRouter basename={process.env.REACT_APP_BASENAME || "/instaauto"}>
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/*"     element={<ProtectedLayout />} />
+        <Route path="/login"   element={<Login />} />
+        <Route path="/clients" element={<ClientsRoute />} />
+        <Route path="/*"       element={<WorkspaceLayout />} />
       </Routes>
     </BrowserRouter>
   );
