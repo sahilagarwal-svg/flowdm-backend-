@@ -109,6 +109,9 @@ class FlowEngine {
           const text = this._applyVars(step.text, profile);
           await this._sendWithFallback(recipientId, { type: "buttons", text, buttons: step.buttons });
           await naturalDelay(2000, 5000);
+        } else if (step.type === "send_carousel") {
+          await this._sendWithFallback(recipientId, { type: "carousel", cards: step.cards });
+          await naturalDelay(2000, 5000);
         } else if (step.type === "delay") {
           await this._sleep(step.ms);
         }
@@ -145,6 +148,8 @@ class FlowEngine {
         await InstagramAPI.sendVideoDM(recipientId, task.videoUrl);
       } else if (task.type === "buttons") {
         await InstagramAPI.sendButtonsDM(recipientId, task.text, task.buttons);
+      } else if (task.type === "carousel") {
+        await InstagramAPI.sendCarouselDM(recipientId, task.cards);
       } else {
         await InstagramAPI.sendDM(recipientId, task.message);
       }
