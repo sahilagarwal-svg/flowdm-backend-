@@ -3,9 +3,28 @@ const MessageQueue  = require("./MessageQueue");
 const db            = require("./db");
 const { appendLead, extractPhoneNumber } = require("./googleSheets");
 
-function naturalDelay(minMs = 2000, maxMs = 5000) {
+// Per-user lock — ensures only one flow runs per user at a time
+const userLocks = new Map();
+function withUserLock(userId, fn) {
+  const prev = userLocks.get(userId) || Promise.resolve();
+  const next = prev
+    .then(() => fn())
+    .finally(() => { if (userLocks.get(userId) === next) userLocks.delete(userId); });
+  userLocks.set(userId, next);
+  return next;
+}
+
+function naturalDelay(minMs = 500, maxMs = 1200) {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Check if any step in the flow uses name variables — only then fetch profile
+function flowUsesProfile(steps) {
+  return steps.some(s =>
+    (s.message && /\{\{(first_name|name)\}\}/.test(s.message)) ||
+    (s.text    && /\{\{(first_name|name)\}\}/.test(s.text))
+  );
 }
 
 class FlowEngine {
@@ -33,7 +52,7 @@ class FlowEngine {
         const keywords = (flow.trigger.keywords || []).map((k) => k.toLowerCase());
         if (keywords.some((kw) => lowerText.includes(kw))) {
           console.log(`[FlowEngine] "${flow.name}" triggered by keyword "${lowerText}" from ${senderId}`);
-          await this.executeFlow(flow, senderId, client);
+          withUserLock(senderId, () => this.executeFlow(flow, senderId, client));
           await db.logEvent({ type: "dm_keyword", senderId, flowId: flow.id, keyword: lowerText, clientId });
           return;
         }
@@ -41,7 +60,7 @@ class FlowEngine {
 
       const defaultFlow = flows.find((f) => f.trigger.type === "any_dm");
       if (defaultFlow) {
-        await this.executeFlow(defaultFlow, senderId, client);
+        withUserLock(senderId, () => this.executeFlow(defaultFlow, senderId, client));
         await db.logEvent({ type: "dm_keyword", senderId, flowId: defaultFlow.id, clientId });
       }
     } catch (err) {
@@ -72,13 +91,10 @@ class FlowEngine {
       const flow     = flows.find((f) => f.trigger.type === "new_follower");
       if (!flow) return;
 
-      setTimeout(async () => {
-        try {
-          await this.executeFlow(flow, followerId, client);
-          await db.logEvent({ type: "new_follower_dm", senderId: followerId, flowId: flow.id, clientId });
-        } catch (err) {
-          console.error(`[FlowEngine] new_follower flow error (follower=${followerId}):`, err.message);
-        }
+      setTimeout(() => {
+        withUserLock(followerId, () => this.executeFlow(flow, followerId, client))
+          .then(() => db.logEvent({ type: "new_follower_dm", senderId: followerId, flowId: flow.id, clientId }))
+          .catch(err => console.error(`[FlowEngine] new_follower flow error (follower=${followerId}):`, err.message));
       }, 10_000);
     } catch (err) {
       console.error(`[FlowEngine] handleNewFollower error (follower=${followerId}):`, err.message);
@@ -92,7 +108,7 @@ class FlowEngine {
       const flows    = await db.getActiveFlows(clientId);
       const flow     = flows.find((f) => f.trigger.type === "story_reply");
       if (!flow) return;
-      await this.executeFlow(flow, senderId, client);
+      withUserLock(senderId, () => this.executeFlow(flow, senderId, client));
       await db.logEvent({ type: "story_reply_dm", senderId, flowId: flow.id, clientId });
     } catch (err) {
       console.error(`[FlowEngine] handleStoryReply error (sender=${senderId}):`, err.message);
@@ -112,7 +128,7 @@ class FlowEngine {
         if (flow.trigger.type !== "comment_keyword") continue;
         const keywords = (flow.trigger.keywords || []).map((k) => k.toLowerCase());
         if (keywords.some((kw) => commentText.includes(kw))) {
-          await this.executeFlow(flow, commenterId, client);
+          withUserLock(commenterId, () => this.executeFlow(flow, commenterId, client));
           await db.logEvent({ type: "comment_dm", senderId: commenterId, flowId: flow.id, clientId });
           return;
         }
@@ -124,30 +140,32 @@ class FlowEngine {
 
   // ─── Execute a flow step by step ──────────────────────────────────────────
   async executeFlow(flow, recipientId, client = null) {
-    const profile = await this._fetchProfile(recipientId, client);
+    // Only fetch profile if the flow actually uses name variables (saves ~300ms)
+    const profile = flowUsesProfile(flow.steps)
+      ? await this._fetchProfile(recipientId, client)
+      : null;
 
-    for (const step of flow.steps) {
+    for (let i = 0; i < flow.steps.length; i++) {
+      const step = flow.steps[i];
       try {
         if (step.type === "send_message") {
           const message = this._applyVars(step.message, profile);
           await this._sendWithFallback(recipientId, { type: "text", message }, client);
-          await naturalDelay(2000, 5000);
         } else if (step.type === "send_image") {
           await this._sendWithFallback(recipientId, { type: "image", imageUrl: step.imageUrl }, client);
-          await naturalDelay(2000, 5000);
         } else if (step.type === "send_video") {
           await this._sendWithFallback(recipientId, { type: "video", videoUrl: step.videoUrl }, client);
-          await naturalDelay(2000, 5000);
         } else if (step.type === "send_buttons") {
           const text = this._applyVars(step.text, profile);
           await this._sendWithFallback(recipientId, { type: "buttons", text, buttons: step.buttons }, client);
-          await naturalDelay(2000, 5000);
         } else if (step.type === "send_carousel") {
           await this._sendWithFallback(recipientId, { type: "carousel", cards: step.cards }, client);
-          await naturalDelay(2000, 5000);
         } else if (step.type === "delay") {
           await this._sleep(step.ms);
+          continue; // skip naturalDelay after an explicit delay step
         }
+        // Add a small gap between steps (skip after last step)
+        if (i < flow.steps.length - 1) await naturalDelay(500, 1200);
       } catch (err) {
         console.error(`[FlowEngine] Step "${step.type}" failed for ${recipientId}:`, err.message);
       }
