@@ -4,7 +4,7 @@ const { v4: uuid } = require("uuid");
 const db      = require("../services/db");
 
 const VALID_TRIGGERS = ["keyword", "new_follower", "any_dm", "story_reply", "comment_keyword"];
-const VALID_STEPS    = ["send_message", "send_image", "send_video", "send_buttons", "delay", "send_carousel"];
+const VALID_STEPS    = ["send_message", "send_image", "send_video", "send_buttons", "delay", "send_carousel", "send_image_burst"];
 
 function getClientId(req) {
   const h = req.headers["x-client-id"];
@@ -58,6 +58,14 @@ function validateFlow(body) {
       } else if (step.type === "delay") {
         if (typeof step.ms !== "number" || step.ms < 0)
           errors.push(`steps[${i}].ms must be a non-negative number`);
+      } else if (step.type === "send_image_burst") {
+        if (!Array.isArray(step.imageUrls) || step.imageUrls.length === 0)
+          errors.push(`steps[${i}].imageUrls must be a non-empty array`);
+        else
+          step.imageUrls.forEach((url, j) => {
+            if (!url || !String(url).trim())
+              errors.push(`steps[${i}].imageUrls[${j}] must not be empty`);
+          });
       }
     });
   }

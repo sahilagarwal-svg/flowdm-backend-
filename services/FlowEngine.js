@@ -143,7 +143,15 @@ class FlowEngine {
           await this._sendWithFallback(recipientId, { type: "buttons", text, buttons: step.buttons }, client);
           await naturalDelay(2000, 5000);
         } else if (step.type === "send_carousel") {
-          await this._sendWithFallback(recipientId, { type: "carousel", cards: step.cards });
+          await this._sendWithFallback(recipientId, { type: "carousel", cards: step.cards }, client);
+          await naturalDelay(2000, 5000);
+        } else if (step.type === "send_image_burst") {
+          // Fire all images simultaneously — no delay between them
+          await Promise.all(
+            (step.imageUrls || []).map(url =>
+              this._sendWithFallback(recipientId, { type: "image", imageUrl: url }, client)
+            )
+          );
           await naturalDelay(2000, 5000);
         } else if (step.type === "delay") {
           await this._sleep(step.ms);
@@ -162,6 +170,8 @@ class FlowEngine {
         await InstagramAPI.sendVideoDM(recipientId, task.videoUrl, client);
       } else if (task.type === "buttons") {
         await InstagramAPI.sendButtonsDM(recipientId, task.text, task.buttons, client);
+      } else if (task.type === "carousel") {
+        await InstagramAPI.sendCarouselDM(recipientId, task.cards, client);
       } else {
         await InstagramAPI.sendDM(recipientId, task.message, client);
       }
@@ -188,28 +198,6 @@ class FlowEngine {
       .replace(/\{\{name\}\}/g,       profile.name || "");
   }
 
-<<<<<<< HEAD
-=======
-  async _sendWithFallback(recipientId, task) {
-    try {
-      if (task.type === "image") {
-        await InstagramAPI.sendImageDM(recipientId, task.imageUrl);
-      } else if (task.type === "video") {
-        await InstagramAPI.sendVideoDM(recipientId, task.videoUrl);
-      } else if (task.type === "buttons") {
-        await InstagramAPI.sendButtonsDM(recipientId, task.text, task.buttons);
-      } else if (task.type === "carousel") {
-        await InstagramAPI.sendCarouselDM(recipientId, task.cards);
-      } else {
-        await InstagramAPI.sendDM(recipientId, task.message);
-      }
-    } catch (err) {
-      console.warn(`[FlowEngine] Direct send failed, enqueuing for retry — ${err.message}`);
-      MessageQueue.enqueue({ ...task, recipientId });
-    }
-  }
-
->>>>>>> harish
   _sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
