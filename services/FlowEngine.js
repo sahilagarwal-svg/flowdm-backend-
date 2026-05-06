@@ -3,8 +3,22 @@ const MessageQueue  = require("./MessageQueue");
 const db            = require("./db");
 const { appendLead, extractPhoneNumber } = require("./googleSheets");
 
-function naturalDelay(minMs = 2000, maxMs = 5000) {
-  const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+// Cached delay settings — refresh every 60 seconds
+let _delayCache = null;
+let _delayCacheAt = 0;
+
+async function naturalDelay() {
+  const now = Date.now();
+  if (!_delayCache || now - _delayCacheAt > 60000) {
+    const minVal = await db.getSetting("reply_delay_min");
+    const maxVal = await db.getSetting("reply_delay_max");
+    _delayCache = {
+      min: minVal ? parseInt(minVal) : 1000,
+      max: maxVal ? parseInt(maxVal) : 2500,
+    };
+    _delayCacheAt = now;
+  }
+  const ms = Math.floor(Math.random() * (_delayCache.max - _delayCache.min + 1)) + _delayCache.min;
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
