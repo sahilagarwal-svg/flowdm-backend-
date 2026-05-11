@@ -22,7 +22,30 @@ async function naturalDelay() {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
+
 class FlowEngine {
+  constructor() {
+    this._cooldowns = new Map();
+    // Clean up expired entries every 5 minutes to prevent memory leak
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, ts] of this._cooldowns) {
+        if (now - ts > COOLDOWN_MS) this._cooldowns.delete(key);
+      }
+    }, 5 * 60 * 1000);
+  }
+
+  _isOnCooldown(senderId, flowId) {
+    const key = `${senderId}:${flowId}`;
+    const last = this._cooldowns.get(key);
+    return last && (Date.now() - last) < COOLDOWN_MS;
+  }
+
+  _setCooldown(senderId, flowId) {
+    this._cooldowns.set(`${senderId}:${flowId}`, Date.now());
+  }
+
   // ─── Handle incoming DM ────────────────────────────────────────────────────
   async handleIncomingDM(senderId, text, client = null) {
     try {
@@ -46,7 +69,12 @@ class FlowEngine {
         if (flow.trigger.type !== "keyword") continue;
         const keywords = (flow.trigger.keywords || []).map((k) => k.toLowerCase());
         if (keywords.some((kw) => lowerText.includes(kw))) {
+          if (this._isOnCooldown(senderId, flow.id)) {
+            console.log(`[FlowEngine] Cooldown active for ${senderId} on flow "${flow.name}" — skipping`);
+            return;
+          }
           console.log(`[FlowEngine] "${flow.name}" triggered by keyword "${lowerText}" from ${senderId}`);
+          this._setCooldown(senderId, flow.id);
           await this.executeFlow(flow, senderId, client);
           await db.logEvent({ type: "dm_keyword", senderId, flowId: flow.id, keyword: lowerText, clientId });
           return;
@@ -55,6 +83,11 @@ class FlowEngine {
 
       const defaultFlow = flows.find((f) => f.trigger.type === "any_dm");
       if (defaultFlow) {
+        if (this._isOnCooldown(senderId, defaultFlow.id)) {
+          console.log(`[FlowEngine] Cooldown active for ${senderId} on flow "${defaultFlow.name}" — skipping`);
+          return;
+        }
+        this._setCooldown(senderId, defaultFlow.id);
         await this.executeFlow(defaultFlow, senderId, client);
         await db.logEvent({ type: "dm_keyword", senderId, flowId: defaultFlow.id, clientId });
       }
@@ -88,6 +121,11 @@ class FlowEngine {
 
       setTimeout(async () => {
         try {
+          if (this._isOnCooldown(followerId, flow.id)) {
+            console.log(`[FlowEngine] Cooldown active for ${followerId} on new_follower flow — skipping`);
+            return;
+          }
+          this._setCooldown(followerId, flow.id);
           await this.executeFlow(flow, followerId, client);
           await db.logEvent({ type: "new_follower_dm", senderId: followerId, flowId: flow.id, clientId });
         } catch (err) {
@@ -106,6 +144,11 @@ class FlowEngine {
       const flows    = await db.getActiveFlows(clientId);
       const flow     = flows.find((f) => f.trigger.type === "story_reply");
       if (!flow) return;
+      if (this._isOnCooldown(senderId, flow.id)) {
+        console.log(`[FlowEngine] Cooldown active for ${senderId} on story_reply flow — skipping`);
+        return;
+      }
+      this._setCooldown(senderId, flow.id);
       await this.executeFlow(flow, senderId, client);
       await db.logEvent({ type: "story_reply_dm", senderId, flowId: flow.id, clientId });
     } catch (err) {
@@ -126,6 +169,11 @@ class FlowEngine {
         if (flow.trigger.type !== "comment_keyword") continue;
         const keywords = (flow.trigger.keywords || []).map((k) => k.toLowerCase());
         if (keywords.some((kw) => commentText.includes(kw))) {
+          if (this._isOnCooldown(commenterId, flow.id)) {
+            console.log(`[FlowEngine] Cooldown active for ${commenterId} on comment flow — skipping`);
+            return;
+          }
+          this._setCooldown(commenterId, flow.id);
           await this.executeFlow(flow, commenterId, client);
           await db.logEvent({ type: "comment_dm", senderId: commenterId, flowId: flow.id, clientId });
           return;
@@ -145,20 +193,20 @@ class FlowEngine {
         if (step.type === "send_message") {
           const message = this._applyVars(step.message, profile);
           await this._sendWithFallback(recipientId, { type: "text", message }, client);
-          await naturalDelay(2000, 5000);
+          await naturalDelay();
         } else if (step.type === "send_image") {
           await this._sendWithFallback(recipientId, { type: "image", imageUrl: step.imageUrl }, client);
-          await naturalDelay(2000, 5000);
+          await naturalDelay();
         } else if (step.type === "send_video") {
           await this._sendWithFallback(recipientId, { type: "video", videoUrl: step.videoUrl }, client);
-          await naturalDelay(2000, 5000);
+          await naturalDelay();
         } else if (step.type === "send_buttons") {
           const text = this._applyVars(step.text, profile);
           await this._sendWithFallback(recipientId, { type: "buttons", text, buttons: step.buttons }, client);
-          await naturalDelay(2000, 5000);
+          await naturalDelay();
         } else if (step.type === "send_carousel") {
           await this._sendWithFallback(recipientId, { type: "carousel", cards: step.cards }, client);
-          await naturalDelay(2000, 5000);
+          await naturalDelay();
         } else if (step.type === "send_image_burst") {
           // Fire all images simultaneously — no delay between them
           await Promise.all(
@@ -166,7 +214,7 @@ class FlowEngine {
               this._sendWithFallback(recipientId, { type: "image", imageUrl: url }, client)
             )
           );
-          await naturalDelay(2000, 5000);
+          await naturalDelay();
         } else if (step.type === "delay") {
           await this._sleep(step.ms);
         }
