@@ -24,6 +24,14 @@ async function naturalDelay() {
 
 const COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
 
+const STOP_WORDS = new Set([
+  "is","the","for","a","an","what","how","i","to","do","can","you","me","my",
+  "we","our","am","are","was","were","be","been","have","has","had","will",
+  "would","could","should","may","might","does","did","of","in","on","at",
+  "by","with","about","as","it","its","that","this","and","or","but","if",
+  "so","just","get","all","please","tell","more","want","need","give","us",
+])
+
 class FlowEngine {
   constructor() {
     this._cooldowns = new Map();
@@ -65,20 +73,25 @@ class FlowEngine {
         }
       }
 
+      // Score all keyword flows — pick the best match instead of first match
+      let bestFlow  = null;
+      let bestScore = 0;
       for (const flow of flows) {
         if (flow.trigger.type !== "keyword") continue;
-        const keywords = (flow.trigger.keywords || []).map((k) => k.toLowerCase());
-        if (keywords.some((kw) => lowerText.includes(kw))) {
-          if (this._isOnCooldown(senderId, flow.id)) {
-            console.log(`[FlowEngine] Cooldown active for ${senderId} on flow "${flow.name}" — skipping`);
-            return;
-          }
-          console.log(`[FlowEngine] "${flow.name}" triggered by keyword "${lowerText}" from ${senderId}`);
-          this._setCooldown(senderId, flow.id);
-          await this.executeFlow(flow, senderId, client);
-          await db.logEvent({ type: "dm_keyword", senderId, flowId: flow.id, keyword: lowerText, clientId });
+        const score = this._scoreFlow(flow, lowerText);
+        if (score > bestScore) { bestScore = score; bestFlow = flow; }
+      }
+
+      if (bestFlow) {
+        if (this._isOnCooldown(senderId, bestFlow.id)) {
+          console.log(`[FlowEngine] Cooldown active for ${senderId} on flow "${bestFlow.name}" — skipping`);
           return;
         }
+        console.log(`[FlowEngine] "${bestFlow.name}" matched (score=${bestScore}) for "${lowerText}" from ${senderId}`);
+        this._setCooldown(senderId, bestFlow.id);
+        await this.executeFlow(bestFlow, senderId, client);
+        await db.logEvent({ type: "dm_keyword", senderId, flowId: bestFlow.id, keyword: lowerText, clientId });
+        return;
       }
 
       const defaultFlow = flows.find((f) => f.trigger.type === "any_dm");
@@ -165,19 +178,21 @@ class FlowEngine {
       if (!commenterId) return;
 
       const flows = await db.getActiveFlows(clientId);
+      let bestFlow  = null;
+      let bestScore = 0;
       for (const flow of flows) {
         if (flow.trigger.type !== "comment_keyword") continue;
-        const keywords = (flow.trigger.keywords || []).map((k) => k.toLowerCase());
-        if (keywords.some((kw) => commentText.includes(kw))) {
-          if (this._isOnCooldown(commenterId, flow.id)) {
-            console.log(`[FlowEngine] Cooldown active for ${commenterId} on comment flow — skipping`);
-            return;
-          }
-          this._setCooldown(commenterId, flow.id);
-          await this.executeFlow(flow, commenterId, client);
-          await db.logEvent({ type: "comment_dm", senderId: commenterId, flowId: flow.id, clientId });
+        const score = this._scoreFlow(flow, commentText);
+        if (score > bestScore) { bestScore = score; bestFlow = flow; }
+      }
+      if (bestFlow) {
+        if (this._isOnCooldown(commenterId, bestFlow.id)) {
+          console.log(`[FlowEngine] Cooldown active for ${commenterId} on comment flow — skipping`);
           return;
         }
+        this._setCooldown(commenterId, bestFlow.id);
+        await this.executeFlow(bestFlow, commenterId, client);
+        await db.logEvent({ type: "comment_dm", senderId: commenterId, flowId: bestFlow.id, clientId });
       }
     } catch (err) {
       console.error(`[FlowEngine] handleComment error:`, err.message);
@@ -249,6 +264,33 @@ class FlowEngine {
     } catch {
       return null;
     }
+  }
+
+  // ─── Score a flow against an incoming message ─────────────────────────────
+  // Phase 1: each keyword found as a substring scores its length (longer = more specific)
+  // Phase 2: each meaningful word from the message that appears in any keyword scores +1
+  _scoreFlow(flow, lowerText) {
+    const keywords = (flow.trigger.keywords || []).map(k => k.toLowerCase().trim()).filter(Boolean);
+    let score = 0;
+
+    for (const kw of keywords) {
+      if (lowerText.includes(kw)) {
+        score += kw.length;
+      }
+    }
+
+    const messageWords = lowerText
+      .replace(/[^a-z0-9\s]/g, "")
+      .split(/\s+/)
+      .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+
+    for (const word of messageWords) {
+      if (keywords.some(kw => kw.includes(word))) {
+        score += 1;
+      }
+    }
+
+    return score;
   }
 
   _applyVars(text, profile) {
