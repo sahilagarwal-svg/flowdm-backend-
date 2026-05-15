@@ -54,7 +54,11 @@ router.post("/", verifyN8nSecret, async (req, res) => {
           console.log(`[Webhook] Postback from ${senderId}: "${payload}"`);
           await FlowEngine.handleIncomingDM(senderId, payload, client);
         } else if (event.message && !event.message.is_echo) {
-          if (event.message.reply_to?.story) {
+          const hasStoryMention = event.message.attachments?.some(a => a.type === "story_mention");
+          if (hasStoryMention) {
+            console.log(`[Webhook] Story mention from ${senderId}`);
+            await FlowEngine.handleStoryMention(senderId, event, client);
+          } else if (event.message.reply_to?.story) {
             console.log(`[Webhook] Story reply from ${senderId}`);
             await FlowEngine.handleStoryReply(senderId, event, client);
           } else {

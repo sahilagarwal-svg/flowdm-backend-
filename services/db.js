@@ -54,6 +54,44 @@ async function init() {
     CREATE INDEX IF NOT EXISTS idx_flows_active   ON flows(active);
     CREATE INDEX IF NOT EXISTS idx_flows_client   ON flows(client_id);
     CREATE INDEX IF NOT EXISTS idx_events_client  ON events(client_id);
+
+    CREATE TABLE IF NOT EXISTS contacts (
+      ig_user_id        TEXT NOT NULL,
+      client_id         TEXT NOT NULL DEFAULT '',
+      name              TEXT,
+      username          TEXT,
+      first_seen_at     TIMESTAMPTZ DEFAULT NOW(),
+      last_seen_at      TIMESTAMPTZ DEFAULT NOW(),
+      interaction_count INT DEFAULT 1,
+      opted_out         BOOLEAN DEFAULT false,
+      PRIMARY KEY (ig_user_id, client_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_contacts_client ON contacts(client_id);
+
+    CREATE TABLE IF NOT EXISTS broadcasts (
+      id         TEXT PRIMARY KEY,
+      client_id  TEXT NOT NULL DEFAULT '',
+      name       TEXT NOT NULL,
+      message    TEXT NOT NULL,
+      status     TEXT DEFAULT 'draft',
+      total      INT DEFAULT 0,
+      sent       INT DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      sent_at    TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS scheduled_messages (
+      id            SERIAL PRIMARY KEY,
+      recipient_id  TEXT NOT NULL,
+      client_id     TEXT NOT NULL DEFAULT '',
+      msg_type      TEXT NOT NULL,
+      payload       JSONB NOT NULL,
+      scheduled_for TIMESTAMPTZ NOT NULL,
+      sent          BOOLEAN DEFAULT false,
+      flow_id       TEXT,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sched_due ON scheduled_messages(scheduled_for) WHERE sent=false;
   `);
   console.log("[DB] PostgreSQL tables ready");
 }
@@ -262,6 +300,112 @@ const db = {
     }, {});
 
     return { totalDMs: Number(countRes.rows[0].c), byType };
+  },
+
+  // ─── Contacts ───────────────────────────────────────────────────────────────
+  async upsertContact(igUserId, clientId, { name, username } = {}) {
+    const cid = clientId || '';
+    await pool.query(`
+      INSERT INTO contacts (ig_user_id, client_id, name, username, first_seen_at, last_seen_at, interaction_count)
+      VALUES ($1, $2, $3, $4, NOW(), NOW(), 1)
+      ON CONFLICT (ig_user_id, client_id) DO UPDATE SET
+        name              = COALESCE(EXCLUDED.name, contacts.name),
+        username          = COALESCE(EXCLUDED.username, contacts.username),
+        last_seen_at      = NOW(),
+        interaction_count = contacts.interaction_count + 1
+    `, [igUserId, cid, name || null, username || null]);
+  },
+
+  async getContacts(clientId = null, limit = 200, offset = 0) {
+    const cid = clientId || '';
+    const { rows } = await pool.query(
+      'SELECT * FROM contacts WHERE client_id=$1 ORDER BY last_seen_at DESC LIMIT $2 OFFSET $3',
+      [cid, limit, offset]
+    );
+    return rows.map(r => ({
+      igUserId: r.ig_user_id, clientId: r.client_id || null,
+      name: r.name, username: r.username,
+      firstSeenAt: r.first_seen_at, lastSeenAt: r.last_seen_at,
+      interactionCount: r.interaction_count, optedOut: r.opted_out,
+    }));
+  },
+
+  async isContactOptedOut(igUserId, clientId = null) {
+    const cid = clientId || '';
+    const { rows } = await pool.query(
+      'SELECT opted_out FROM contacts WHERE ig_user_id=$1 AND client_id=$2',
+      [igUserId, cid]
+    );
+    return rows.length ? rows[0].opted_out : false;
+  },
+
+  async setContactOptOut(igUserId, clientId, optedOut) {
+    const cid = clientId || '';
+    await pool.query(
+      `INSERT INTO contacts (ig_user_id, client_id, opted_out) VALUES ($1, $2, $3)
+       ON CONFLICT (ig_user_id, client_id) DO UPDATE SET opted_out = EXCLUDED.opted_out`,
+      [igUserId, cid, optedOut]
+    );
+  },
+
+  async getActiveContactIds(clientId = null) {
+    const cid = clientId || '';
+    const { rows } = await pool.query(
+      'SELECT ig_user_id FROM contacts WHERE client_id=$1 AND opted_out=false ORDER BY last_seen_at DESC',
+      [cid]
+    );
+    return rows.map(r => r.ig_user_id);
+  },
+
+  // ─── Broadcasts ──────────────────────────────────────────────────────────────
+  async saveBroadcast(b) {
+    const cid = b.clientId || '';
+    await pool.query(
+      'INSERT INTO broadcasts (id, client_id, name, message, status, total, sent) VALUES ($1,$2,$3,$4,$5,$6,0)',
+      [b.id, cid, b.name, b.message, b.status || 'sending', b.total || 0]
+    );
+  },
+
+  async updateBroadcast(id, { status, sent, total, sentAt }) {
+    await pool.query(
+      'UPDATE broadcasts SET status=$1, sent=$2, total=$3, sent_at=$4 WHERE id=$5',
+      [status, sent, total, sentAt || null, id]
+    );
+  },
+
+  async getBroadcasts(clientId = null) {
+    const cid = clientId || '';
+    const { rows } = await pool.query(
+      'SELECT * FROM broadcasts WHERE client_id=$1 ORDER BY created_at DESC',
+      [cid]
+    );
+    return rows.map(r => ({
+      id: r.id, name: r.name, message: r.message, status: r.status,
+      total: r.total, sent: r.sent, createdAt: r.created_at, sentAt: r.sent_at,
+    }));
+  },
+
+  // ─── Scheduled Messages (drip/sequences) ────────────────────────────────────
+  async scheduleMessage({ recipientId, clientId, msgType, payload, scheduledFor, flowId }) {
+    const cid = clientId || '';
+    await pool.query(
+      'INSERT INTO scheduled_messages (recipient_id, client_id, msg_type, payload, scheduled_for, flow_id) VALUES ($1,$2,$3,$4,$5,$6)',
+      [recipientId, cid, msgType, JSON.stringify(payload), scheduledFor, flowId || null]
+    );
+  },
+
+  async getDueScheduledMessages() {
+    const { rows } = await pool.query(
+      'SELECT * FROM scheduled_messages WHERE sent=false AND scheduled_for <= NOW() ORDER BY scheduled_for ASC LIMIT 50'
+    );
+    return rows.map(r => ({
+      id: r.id, recipientId: r.recipient_id, clientId: r.client_id || null,
+      msgType: r.msg_type, payload: r.payload, scheduledFor: r.scheduled_for, flowId: r.flow_id,
+    }));
+  },
+
+  async markScheduledMessageSent(id) {
+    await pool.query('UPDATE scheduled_messages SET sent=true WHERE id=$1', [id]);
   },
 
   // ─── Settings ────────────────────────────────────────────────────────────────

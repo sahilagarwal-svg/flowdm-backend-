@@ -28,19 +28,27 @@ const analyticsRouter = require("./routes/analytics");
 const uploadRouter    = require("./routes/upload");
 const clientsRouter   = require("./routes/clients");
 const settingsRouter  = require("./routes/settings");
+const contactsRouter  = require("./routes/contacts");
+const broadcastsRouter = require("./routes/broadcasts");
+const Scheduler       = require("./services/Scheduler");
 
-app.use("/api/auth",      authRouter);
-app.use("/webhook",       webhookLimiter, webhookRouter);
-app.use("/api/flows",     requireAuth, flowRouter);
-app.use("/api/analytics", requireAuth, analyticsRouter);
-app.use("/api/upload",    requireAuth, uploadRouter);
-app.use("/api/clients",   requireAuth, clientsRouter);
-app.use("/api/settings",  requireAuth, settingsRouter);
+app.use("/api/auth",       authRouter);
+app.use("/webhook",        webhookLimiter, webhookRouter);
+app.use("/api/flows",      requireAuth, flowRouter);
+app.use("/api/analytics",  requireAuth, analyticsRouter);
+app.use("/api/upload",     requireAuth, uploadRouter);
+app.use("/api/clients",    requireAuth, clientsRouter);
+app.use("/api/settings",   requireAuth, settingsRouter);
+app.use("/api/contacts",   requireAuth, contactsRouter);
+app.use("/api/broadcasts", requireAuth, broadcastsRouter);
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 
 const PORT = process.env.PORT || 3001;
 db.init()
-  .then(() => app.listen(PORT, () => console.log(`FlowDM backend running on port ${PORT}`)))
+  .then(() => {
+    Scheduler.start();
+    app.listen(PORT, () => console.log(`FlowDM backend running on port ${PORT}`));
+  })
   .catch((err) => { console.error("DB init failed:", err.message); process.exit(1); });

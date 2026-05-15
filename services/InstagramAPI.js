@@ -184,6 +184,28 @@ class InstagramAPI {
     }
   }
 
+  // ─── Reply to a comment publicly (posts in comment section, tags user) ───────
+  async replyToComment(commentId, message, client = null) {
+    const { token } = this._creds(client);
+    try {
+      const res = await fetch(`${BASE}/${commentId}/replies`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
+      console.log(`[InstagramAPI] Comment reply posted → comment ${commentId}`);
+      return data;
+    } catch (err) {
+      console.error(`[InstagramAPI] replyToComment failed → ${commentId}: ${err.message}`);
+      throw err;
+    }
+  }
+
   async getMedia(limit = 10) {
     try {
       const res = await fetch(
