@@ -3,8 +3,8 @@ const router  = express.Router();
 const { v4: uuid } = require("uuid");
 const db      = require("../services/db");
 
-const VALID_TRIGGERS = ["keyword", "new_follower", "any_dm", "story_reply", "comment_keyword"];
-const VALID_STEPS    = ["send_message", "send_image", "send_video", "send_buttons", "delay", "send_carousel", "send_image_burst"];
+const VALID_TRIGGERS = ["keyword", "new_follower", "any_dm", "story_reply", "story_mention", "comment_keyword"];
+const VALID_STEPS    = ["send_message", "reply_comment", "send_image", "send_video", "send_buttons", "delay", "send_carousel", "send_image_burst", "follow_up"];
 
 function getClientId(req) {
   const h = req.headers["x-client-id"];
