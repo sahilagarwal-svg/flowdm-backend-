@@ -3,6 +3,20 @@ const router      = require("express").Router();
 const FlowEngine  = require("../services/FlowEngine");
 const db          = require("../services/db");
 
+// Dedup cache — prevents processing the same message/event twice (Meta sometimes retries)
+const _seen = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const [k, t] of _seen) if (t < cutoff) _seen.delete(k);
+}, 60 * 1000);
+
+function isDuplicate(id) {
+  if (!id) return false;
+  if (_seen.has(id)) return true;
+  _seen.set(id, Date.now());
+  return false;
+}
+
 function verifyN8nSecret(req, res, next) {
   const expected = process.env.N8N_SHARED_SECRET;
   if (!expected) return next();
@@ -50,10 +64,12 @@ router.post("/", verifyN8nSecret, async (req, res) => {
         if (!senderId) continue;
 
         if (event.postback) {
+          if (isDuplicate(event.postback.mid || `${senderId}:${event.postback.payload}`)) continue;
           const payload = event.postback.payload || "";
           console.log(`[Webhook] Postback from ${senderId}: "${payload}"`);
           await FlowEngine.handleIncomingDM(senderId, payload, client);
         } else if (event.message && !event.message.is_echo) {
+          if (isDuplicate(event.message.mid)) continue;
           const hasStoryMention = event.message.attachments?.some(a => a.type === "story_mention");
           if (hasStoryMention) {
             console.log(`[Webhook] Story mention from ${senderId}`);
@@ -82,6 +98,7 @@ router.post("/", verifyN8nSecret, async (req, res) => {
           }
         } else if (change.field === "comments") {
           const comment = change.value;
+          if (isDuplicate(comment?.id)) continue;
           console.log(`[Webhook] Comment from ${comment?.from?.id}: "${comment?.text}"`);
           await FlowEngine.handleComment(comment, client);
         }
