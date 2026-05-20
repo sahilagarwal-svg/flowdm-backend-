@@ -203,7 +203,15 @@ router.get("/instagram/callback", async (req, res) => {
     // Step 6: fetch Instagram profile (username, name, profile picture)
     const profile = await MetaOAuth.getInstagramProfile(igAccountId, connectedPageToken);
 
-    // Step 7: save (or update) the client record in the database
+    // Step 7: subscribe the page to webhook events using App Access Token
+    try {
+      const subData = await MetaOAuth.subscribePageToWebhook(connectedPageId);
+      console.log("[Auth] Webhook subscription:", JSON.stringify(subData));
+    } catch (subErr) {
+      console.warn("[Auth] Webhook subscription failed (non-fatal):", subErr.message);
+    }
+
+    // Step 8: save (or update) the client record in the database
     const clientId  = uuid();
     const savedId   = await db.saveOAuthClient({
       id:                clientId,
