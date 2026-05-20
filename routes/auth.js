@@ -176,6 +176,7 @@ router.get("/instagram/callback", async (req, res) => {
 
     // Step 4: get the user's Facebook Pages
     const pages = await MetaOAuth.getPages(accessToken);
+    console.log("[Auth] Pages found:", JSON.stringify(pages));
     if (!pages.length) {
       return res.redirect(`${frontendUrl}/connect/callback?error=no_pages`);
     }
