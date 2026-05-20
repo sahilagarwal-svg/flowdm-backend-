@@ -205,7 +205,7 @@ router.get("/instagram/callback", async (req, res) => {
 
     // Step 7: subscribe the page to webhook events automatically
     try {
-      const subData = await MetaOAuth.subscribePageToWebhook(connectedPageId, connectedPageToken);
+      const subData = await MetaOAuth.subscribePageToWebhook(igAccountId, accessToken);
       console.log("[Auth] Webhook subscription:", JSON.stringify(subData));
     } catch (subErr) {
       console.warn("[Auth] Webhook subscription failed (non-fatal):", subErr.message);

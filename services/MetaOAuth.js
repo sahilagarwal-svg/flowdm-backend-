@@ -7,8 +7,6 @@ const SCOPES = [
   "instagram_manage_messages",
   "pages_show_list",
   "pages_read_engagement",
-  "pages_messaging",
-  "pages_manage_metadata",
   "business_management",
 ].join(",");
 
@@ -129,22 +127,22 @@ async function getInstagramProfile(igAccountId, pageAccessToken) {
   return data; // { id, name, username, profile_picture_url }
 }
 
-// Subscribe a Facebook Page to webhook events so Meta sends DMs/comments to our webhook
-async function subscribePageToWebhook(pageId, pageAccessToken) {
+// Subscribe Instagram account to webhook events using instagram_manage_messages permission
+async function subscribePageToWebhook(igAccountId, userAccessToken) {
   const res  = await fetch(
-    `${GRAPH}/${pageId}/subscribed_apps`,
+    `${GRAPH}/${igAccountId}/subscribed_apps`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        subscribed_fields: ["messages", "messaging_postbacks", "follow", "feed"],
-        access_token: pageAccessToken,
+        subscribed_fields: ["messages", "messaging_postbacks"],
+        access_token: userAccessToken,
       }),
     }
   );
   const data = await res.json();
   if (!res.ok || data.error) {
-    throw new Error(data?.error?.message || "Failed to subscribe page to webhook");
+    throw new Error(data?.error?.message || "Failed to subscribe Instagram account to webhook");
   }
   return data;
 }
