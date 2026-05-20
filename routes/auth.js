@@ -203,7 +203,25 @@ router.get("/instagram/callback", async (req, res) => {
     // Step 6: fetch Instagram profile (username, name, profile picture)
     const profile = await MetaOAuth.getInstagramProfile(igAccountId, connectedPageToken);
 
-    // Step 7: save (or update) the client record in the database
+    // Step 7: subscribe the page to webhook events automatically
+    try {
+      const subRes = await fetch(
+        `https://graph.facebook.com/v19.0/${connectedPageId}/subscribed_apps?access_token=${encodeURIComponent(connectedPageToken)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscribed_fields: ["messages", "messaging_postbacks", "comments", "follows"],
+          }),
+        }
+      );
+      const subData = await subRes.json();
+      console.log("[Auth] Webhook subscription:", JSON.stringify(subData));
+    } catch (subErr) {
+      console.warn("[Auth] Webhook subscription failed (non-fatal):", subErr.message);
+    }
+
+    // Step 8: save (or update) the client record in the database
     const clientId  = uuid();
     const savedId   = await db.saveOAuthClient({
       id:                clientId,
