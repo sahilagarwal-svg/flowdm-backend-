@@ -127,6 +127,26 @@ async function getInstagramProfile(igAccountId, pageAccessToken) {
   return data; // { id, name, username, profile_picture_url }
 }
 
+// Subscribe a Facebook Page to webhook events so Meta sends DMs/comments to our webhook
+async function subscribePageToWebhook(pageId, pageAccessToken) {
+  const res  = await fetch(
+    `${GRAPH}/${pageId}/subscribed_apps`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscribed_fields: ["messages", "messaging_postbacks", "follow", "feed"],
+        access_token: pageAccessToken,
+      }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data?.error?.message || "Failed to subscribe page to webhook");
+  }
+  return data;
+}
+
 module.exports = {
   getAuthUrl,
   exchangeCodeForToken,
@@ -136,4 +156,5 @@ module.exports = {
   getPages,
   getInstagramAccountForPage,
   getInstagramProfile,
+  subscribePageToWebhook,
 };

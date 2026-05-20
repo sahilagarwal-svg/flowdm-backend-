@@ -205,17 +205,7 @@ router.get("/instagram/callback", async (req, res) => {
 
     // Step 7: subscribe the page to webhook events automatically
     try {
-      const subRes = await fetch(
-        `https://graph.facebook.com/v19.0/${connectedPageId}/subscribed_apps?access_token=${encodeURIComponent(connectedPageToken)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            subscribed_fields: ["messages", "messaging_postbacks", "comments", "follows"],
-          }),
-        }
-      );
-      const subData = await subRes.json();
+      const subData = await MetaOAuth.subscribePageToWebhook(connectedPageId, connectedPageToken);
       console.log("[Auth] Webhook subscription:", JSON.stringify(subData));
     } catch (subErr) {
       console.warn("[Auth] Webhook subscription failed (non-fatal):", subErr.message);
