@@ -56,7 +56,9 @@ router.post("/", verifyN8nSecret, async (req, res) => {
 
   for (const entry of body.entry || []) {
     // entry.id is the Instagram account that received the event
+    console.log(`[Webhook] Entry ID: ${entry.id}`);
     const client = await resolveClient(entry.id);
+    console.log(`[Webhook] Resolved client: ${client ? client.igUsername || client.id : 'DEFAULT'}`)
 
     for (const event of entry.messaging || []) {
       try {
