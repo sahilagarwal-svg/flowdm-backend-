@@ -20,7 +20,36 @@ async function init() {
       lead_sheet_url TEXT,
       created_at     TIMESTAMPTZ DEFAULT NOW()
     );
-    ALTER TABLE clients ADD COLUMN IF NOT EXISTS lead_sheet_url TEXT;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS lead_sheet_url        TEXT;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS page_id               TEXT;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS page_access_token     TEXT;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS token_expires_at      TIMESTAMPTZ;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS is_active             BOOLEAN DEFAULT true;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS profile_picture_url   TEXT;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS display_name          TEXT;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS oauth_user_id         TEXT;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS user_id               TEXT;
+
+    CREATE TABLE IF NOT EXISTS oauth_states (
+      state      TEXT PRIMARY KEY,
+      user_id    TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id            TEXT PRIMARY KEY,
+      email         TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS data_deletions (
+      id            TEXT PRIMARY KEY,
+      oauth_user_id TEXT NOT NULL,
+      status        TEXT DEFAULT 'pending',
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      completed_at  TIMESTAMPTZ
+    );
 
     CREATE TABLE IF NOT EXISTS flows (
       id           TEXT PRIMARY KEY,
@@ -109,15 +138,23 @@ function toFlow(row) {
 
 function toClient(row, withToken = false) {
   return {
-    id:             row.id,
-    name:           row.name,
-    igUsername:     row.ig_username,
-    igAccountId:    row.ig_account_id,
-    appSecret:      withToken ? row.app_secret   : undefined,
-    webhookToken:   withToken ? row.webhook_token : undefined,
-    accessToken:    withToken ? row.access_token  : undefined,
-    leadSheetUrl:   row.lead_sheet_url || null,
-    createdAt:      row.created_at,
+    id:                row.id,
+    name:              row.name,
+    igUsername:        row.ig_username,
+    igAccountId:       row.ig_account_id,
+    displayName:       row.display_name       || null,
+    profilePictureUrl: row.profile_picture_url || null,
+    pageId:            row.page_id             || null,
+    tokenExpiresAt:    row.token_expires_at    || null,
+    isActive:          row.is_active !== false,
+    userId:            row.user_id             || null,
+    leadSheetUrl:      row.lead_sheet_url      || null,
+    createdAt:         row.created_at,
+    appSecret:         withToken ? row.app_secret         : undefined,
+    webhookToken:      withToken ? row.webhook_token      : undefined,
+    accessToken:       withToken ? row.access_token       : undefined,
+    pageAccessToken:   withToken ? row.page_access_token  : undefined,
+    oauthUserId:       withToken ? row.oauth_user_id      : undefined,
   };
 }
 
@@ -163,6 +200,140 @@ const db = {
   async deleteClient(id) {
     await pool.query("UPDATE flows SET client_id = NULL WHERE client_id = $1", [id]);
     await pool.query("DELETE FROM clients WHERE id = $1", [id]);
+  },
+
+  // Upsert an OAuth-connected client — updates if same ig_account_id already exists
+  async saveOAuthClient(client) {
+    const { rows } = await pool.query(
+      "SELECT id FROM clients WHERE ig_account_id=$1", [client.igAccountId]
+    );
+    if (rows.length > 0) {
+      await pool.query(
+        `UPDATE clients SET name=$1, ig_username=$2, display_name=$3, profile_picture_url=$4,
+         access_token=$5, page_id=$6, page_access_token=$7, token_expires_at=$8,
+         oauth_user_id=$9, is_active=true, user_id=$10 WHERE ig_account_id=$11`,
+        [client.name, client.igUsername, client.displayName, client.profilePictureUrl,
+         client.accessToken, client.pageId, client.pageAccessToken, client.tokenExpiresAt,
+         client.oauthUserId, client.userId, client.igAccountId]
+      );
+      return rows[0].id;
+    }
+    await pool.query(
+      `INSERT INTO clients
+         (id, name, ig_username, display_name, profile_picture_url, ig_account_id,
+          access_token, page_id, page_access_token, token_expires_at, oauth_user_id, is_active, user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12)`,
+      [client.id, client.name, client.igUsername, client.displayName, client.profilePictureUrl,
+       client.igAccountId, client.accessToken, client.pageId, client.pageAccessToken,
+       client.tokenExpiresAt, client.oauthUserId, client.userId]
+    );
+    return client.id;
+  },
+
+  // Returns all clients belonging to a specific user (for self-service portal)
+  async getClientsByUserId(userId) {
+    const { rows } = await pool.query(
+      "SELECT * FROM clients WHERE user_id=$1 ORDER BY created_at ASC", [userId]
+    );
+    return rows.map(r => toClient(r, false));
+  },
+
+  // Returns clients with tokens expiring within N days (for refresh job)
+  async getClientsExpiringWithin(days) {
+    const { rows } = await pool.query(
+      `SELECT * FROM clients
+       WHERE token_expires_at IS NOT NULL
+         AND token_expires_at < NOW() + make_interval(days => $1::int)
+         AND is_active = true`,
+      [days]
+    );
+    return rows.map(r => toClient(r, true));
+  },
+
+  // Update just the token fields after a refresh
+  async updateClientToken(id, { accessToken, tokenExpiresAt, isActive }) {
+    await pool.query(
+      "UPDATE clients SET access_token=$1, token_expires_at=$2, is_active=$3 WHERE id=$4",
+      [accessToken, tokenExpiresAt, isActive !== false, id]
+    );
+  },
+
+  // ─── OAuth States (CSRF protection) ─────────────────────────────────────────
+  async createOAuthState(state, userId = null) {
+    await pool.query(
+      "INSERT INTO oauth_states (state, user_id) VALUES ($1,$2)", [state, userId]
+    );
+  },
+
+  // Deletes and returns the state record — returns null if not found or expired (>10 min)
+  async consumeOAuthState(state) {
+    const { rows } = await pool.query(
+      `DELETE FROM oauth_states
+       WHERE state=$1 AND created_at > NOW() - INTERVAL '10 minutes'
+       RETURNING *`,
+      [state]
+    );
+    return rows.length ? rows[0] : null;
+  },
+
+  // ─── Users ───────────────────────────────────────────────────────────────────
+  async createUser(user) {
+    await pool.query(
+      "INSERT INTO users (id, email, password_hash) VALUES ($1,$2,$3)",
+      [user.id, user.email.toLowerCase(), user.passwordHash]
+    );
+  },
+
+  async getUserByEmail(email) {
+    const { rows } = await pool.query(
+      "SELECT * FROM users WHERE email=$1", [email.toLowerCase()]
+    );
+    return rows.length ? rows[0] : null;
+  },
+
+  async getUserById(id) {
+    const { rows } = await pool.query("SELECT * FROM users WHERE id=$1", [id]);
+    return rows.length ? rows[0] : null;
+  },
+
+  // ─── Data Deletions (Meta compliance) ───────────────────────────────────────
+  async deleteUserData(oauthUserId) {
+    const { rows } = await pool.query(
+      "SELECT id, user_id FROM clients WHERE oauth_user_id=$1", [oauthUserId]
+    );
+    const userIds = [...new Set(rows.map(r => r.user_id).filter(Boolean))];
+    for (const row of rows) {
+      const cid = row.id;
+      await pool.query("DELETE FROM contacts          WHERE client_id=$1", [cid]);
+      await pool.query("DELETE FROM events            WHERE client_id=$1", [cid]);
+      await pool.query("DELETE FROM broadcasts        WHERE client_id=$1", [cid]);
+      await pool.query("DELETE FROM scheduled_messages WHERE client_id=$1", [cid]);
+      await pool.query("DELETE FROM flows             WHERE client_id=$1", [cid]);
+      await pool.query("DELETE FROM clients           WHERE id=$1",        [cid]);
+    }
+    for (const uid of userIds) {
+      await pool.query("DELETE FROM users WHERE id=$1", [uid]);
+    }
+  },
+
+  async createDataDeletion(record) {
+    await pool.query(
+      "INSERT INTO data_deletions (id, oauth_user_id) VALUES ($1,$2)",
+      [record.id, record.oauthUserId]
+    );
+  },
+
+  async completeDataDeletion(id) {
+    await pool.query(
+      "UPDATE data_deletions SET status='deleted', completed_at=NOW() WHERE id=$1", [id]
+    );
+  },
+
+  async getDataDeletion(id) {
+    const { rows } = await pool.query(
+      "SELECT * FROM data_deletions WHERE id=$1", [id]
+    );
+    return rows.length ? rows[0] : null;
   },
 
   // ─── Flows ──────────────────────────────────────────────────────────────────
