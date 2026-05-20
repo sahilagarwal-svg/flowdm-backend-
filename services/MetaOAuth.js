@@ -7,6 +7,7 @@ const SCOPES = [
   "instagram_manage_messages",
   "pages_show_list",
   "pages_read_engagement",
+  "business_management",
 ].join(",");
 
 // Build the Meta OAuth dialog URL the user is redirected to
@@ -66,8 +67,9 @@ async function getTokenUserId(accessToken) {
   return data.id;
 }
 
-// Get all Facebook Pages the user manages (each page has its own page_access_token)
+// Get all Facebook Pages the user manages (personal + Business Manager)
 async function getPages(userAccessToken) {
+  // First try personal pages via /me/accounts
   const res  = await fetch(
     `${GRAPH}/me/accounts?fields=id,name,access_token&access_token=${encodeURIComponent(userAccessToken)}`
   );
@@ -75,7 +77,30 @@ async function getPages(userAccessToken) {
   if (!res.ok || data.error) {
     throw new Error(data?.error?.message || "Failed to get pages");
   }
-  return data.data || []; // [{ id, name, access_token }]
+  const personalPages = data.data || [];
+  if (personalPages.length) return personalPages;
+
+  // Fallback: check Business Manager owned pages
+  const bizRes  = await fetch(
+    `${GRAPH}/me/businesses?fields=id,name&access_token=${encodeURIComponent(userAccessToken)}`
+  );
+  const bizData = await bizRes.json();
+  if (!bizRes.ok || bizData.error) return [];
+
+  const businesses = bizData.data || [];
+  const allPages   = [];
+
+  for (const biz of businesses) {
+    const pRes  = await fetch(
+      `${GRAPH}/${biz.id}/owned_pages?fields=id,name,access_token&access_token=${encodeURIComponent(userAccessToken)}`
+    );
+    const pData = await pRes.json();
+    if (pRes.ok && !pData.error && pData.data) {
+      allPages.push(...pData.data);
+    }
+  }
+
+  return allPages;
 }
 
 // Check if a Facebook Page has a linked Instagram Business Account
