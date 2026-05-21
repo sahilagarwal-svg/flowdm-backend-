@@ -7,8 +7,6 @@ const SCOPES = [
   "instagram_manage_messages",
   "instagram_business_manage_messages",
   "pages_show_list",
-  "pages_read_engagement",
-  "business_management",
 ].join(",");
 
 // Build the Meta OAuth dialog URL the user is redirected to
