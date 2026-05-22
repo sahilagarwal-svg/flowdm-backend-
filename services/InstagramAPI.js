@@ -1,6 +1,6 @@
 const fetch = require("node-fetch");
 
-const BASE = "https://graph.instagram.com/v25.0";
+const BASE = "https://graph.facebook.com/v21.0";
 
 // ─── Sliding-window rate limiter: max 200 outgoing messages per hour ──────────
 const HOURLY_LIMIT = 200;
@@ -37,10 +37,12 @@ class InstagramAPI {
   }
 
   // resolve credentials — use client overrides if provided, else fall back to env
+  // pageAccessToken is preferred for OAuth accounts (has messaging permissions)
+  // accessToken (IGAAN-style) is used for manually-added accounts
   _creds(client) {
     return {
-      token:     client?.accessToken  || this.accessToken,
-      accountId: client?.igAccountId  || this.igAccountId,
+      token:     client?.pageAccessToken || client?.accessToken || this.accessToken,
+      accountId: client?.igAccountId     || this.igAccountId,
     };
   }
 
