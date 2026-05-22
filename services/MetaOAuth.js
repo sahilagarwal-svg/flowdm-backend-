@@ -5,7 +5,6 @@ const GRAPH = "https://graph.facebook.com/v19.0";
 const SCOPES = [
   "instagram_basic",
   "instagram_manage_messages",
-  "instagram_business_manage_messages",
   "pages_show_list",
 ].join(",");
 
