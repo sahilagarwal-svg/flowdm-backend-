@@ -3,10 +3,14 @@ const router  = express.Router();
 const { v4: uuid } = require("uuid");
 const db      = require("../services/db");
 
-// GET all clients (tokens hidden)
+// GET clients — admin sees all, regular user sees only their own
 router.get("/", async (req, res) => {
   try {
-    res.json(await db.getClients());
+    const userId = req.user?.userId || null;
+    const clients = userId
+      ? await db.getClientsByUserId(userId)
+      : await db.getClients();
+    res.json(clients);
   } catch (err) {
     console.error("[Clients] GET /:", err.message);
     res.status(500).json({ error: "Failed to load clients" });
