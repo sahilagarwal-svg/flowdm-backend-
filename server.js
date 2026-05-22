@@ -23,7 +23,9 @@ app.use(cors({
     cb(isAllowed ? null : new Error("CORS: origin not allowed"), isAllowed);
   },
 }));
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 
 const webhookLimiter = rateLimit({
   windowMs:        15 * 60 * 1000,

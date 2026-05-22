@@ -1,5 +1,6 @@
 const express     = require("express");
 const router      = require("express").Router();
+const crypto      = require("crypto");
 const FlowEngine  = require("../services/FlowEngine");
 const db          = require("../services/db");
 
@@ -15,6 +16,31 @@ function isDuplicate(id) {
   if (_seen.has(id)) return true;
   _seen.set(id, Date.now());
   return false;
+}
+
+function verifyMetaSignature(req, res, next) {
+  const appSecret = process.env.APP_SECRET;
+  if (!appSecret) return next(); // skip if not configured
+  const signature = req.headers["x-hub-signature-256"];
+  if (!signature) {
+    console.warn("[Webhook] Rejected — missing x-hub-signature-256");
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const expected = "sha256=" + crypto
+    .createHmac("sha256", appSecret)
+    .update(req.rawBody || "")
+    .digest("hex");
+  try {
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expected);
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      console.warn("[Webhook] Rejected — invalid x-hub-signature-256");
+      return res.status(403).json({ error: "Forbidden" });
+    }
+  } catch {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  next();
 }
 
 function verifyN8nSecret(req, res, next) {
@@ -48,7 +74,7 @@ router.get("/", (req, res) => {
   res.status(403).json({ error: "Webhook verification failed" });
 });
 
-router.post("/", verifyN8nSecret, async (req, res) => {
+router.post("/", verifyMetaSignature, verifyN8nSecret, async (req, res) => {
   res.sendStatus(200);
 
   const body = req.body;
