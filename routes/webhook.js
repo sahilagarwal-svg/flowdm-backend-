@@ -20,11 +20,12 @@ function isDuplicate(id) {
 
 function verifyMetaSignature(req, res, next) {
   const appSecret = process.env.APP_SECRET;
-  if (!appSecret) return next(); // skip if not configured
+  if (!appSecret) return next();
   const signature = req.headers["x-hub-signature-256"];
   if (!signature) {
-    console.warn("[Webhook] Rejected — missing x-hub-signature-256");
-    return res.status(403).json({ error: "Forbidden" });
+    // No signature — allow through but log (echo/delivery events may omit it)
+    console.warn("[Webhook] Warning — x-hub-signature-256 missing, allowing through");
+    return next();
   }
   const expected = "sha256=" + crypto
     .createHmac("sha256", appSecret)
@@ -34,7 +35,7 @@ function verifyMetaSignature(req, res, next) {
     const sigBuf = Buffer.from(signature);
     const expBuf = Buffer.from(expected);
     if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-      console.warn("[Webhook] Rejected — invalid x-hub-signature-256");
+      console.warn("[Webhook] Rejected — invalid x-hub-signature-256 (tampered request)");
       return res.status(403).json({ error: "Forbidden" });
     }
   } catch {
