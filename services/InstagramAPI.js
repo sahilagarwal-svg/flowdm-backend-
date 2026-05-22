@@ -1,6 +1,9 @@
 const fetch = require("node-fetch");
 
-const BASE = "https://graph.facebook.com/v21.0";
+// OAuth accounts use EAA tokens → graph.facebook.com
+// Manually-added accounts use IGAAN tokens → graph.instagram.com
+const FB_BASE = "https://graph.facebook.com/v21.0";
+const IG_BASE = "https://graph.instagram.com/v21.0";
 
 // ─── Sliding-window rate limiter: max 200 outgoing messages per hour ──────────
 const HOURLY_LIMIT = 200;
@@ -16,8 +19,8 @@ function checkRateLimit() {
   sentLog.push(now);
 }
 
-async function postMessage(accountId, accessToken, body) {
-  const res = await fetch(`${BASE}/${accountId}/messages`, {
+async function postMessage(base, accountId, accessToken, body) {
+  const res = await fetch(`${base}/${accountId}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -36,21 +39,28 @@ class InstagramAPI {
     this.igAccountId = process.env.INSTAGRAM_ACCOUNT_ID;
   }
 
-  // resolve credentials — use client overrides if provided, else fall back to env
-  // pageAccessToken is preferred for OAuth accounts (has messaging permissions)
-  // accessToken (IGAAN-style) is used for manually-added accounts
+  // OAuth accounts have pageAccessToken (EAA format) → use graph.facebook.com
+  // Manually-added / Default accounts have IGAAN token → use graph.instagram.com
   _creds(client) {
+    if (client?.pageAccessToken) {
+      return {
+        token:     client.pageAccessToken,
+        accountId: client.igAccountId,
+        base:      FB_BASE,
+      };
+    }
     return {
-      token:     client?.pageAccessToken || client?.accessToken || this.accessToken,
-      accountId: client?.igAccountId     || this.igAccountId,
+      token:     client?.accessToken || this.accessToken,
+      accountId: client?.igAccountId || this.igAccountId,
+      base:      IG_BASE,
     };
   }
 
   async sendDM(recipientId, text, client = null) {
     checkRateLimit();
-    const { token, accountId } = this._creds(client);
+    const { token, accountId, base } = this._creds(client);
     try {
-      const data = await postMessage(accountId, token, {
+      const data = await postMessage(base, accountId, token, {
         recipient: { id: recipientId },
         message: { text },
       });
@@ -64,9 +74,9 @@ class InstagramAPI {
 
   async sendImageDM(recipientId, imageUrl, client = null) {
     checkRateLimit();
-    const { token, accountId } = this._creds(client);
+    const { token, accountId, base } = this._creds(client);
     try {
-      const data = await postMessage(accountId, token, {
+      const data = await postMessage(base, accountId, token, {
         recipient: { id: recipientId },
         message: {
           attachment: {
@@ -85,9 +95,9 @@ class InstagramAPI {
 
   async sendVideoDM(recipientId, videoUrl, client = null) {
     checkRateLimit();
-    const { token, accountId } = this._creds(client);
+    const { token, accountId, base } = this._creds(client);
     try {
-      const data = await postMessage(accountId, token, {
+      const data = await postMessage(base, accountId, token, {
         recipient: { id: recipientId },
         message: {
           attachment: {
@@ -106,9 +116,9 @@ class InstagramAPI {
 
   async sendButtonsDM(recipientId, text, buttons, client = null) {
     checkRateLimit();
-    const { token, accountId } = this._creds(client);
+    const { token, accountId, base } = this._creds(client);
     try {
-      const data = await postMessage(accountId, token, {
+      const data = await postMessage(base, accountId, token, {
         recipient: { id: recipientId },
         message: {
           attachment: {
@@ -138,7 +148,7 @@ class InstagramAPI {
   // Instagram limits: max 10 cards, title max 80 chars, max 3 buttons per card.
   async sendCarouselDM(recipientId, cards, client = null) {
     checkRateLimit();
-    const { token, accountId } = this._creds(client);
+    const { token, accountId, base } = this._creds(client);
     try {
       const elements = cards.slice(0, 10).map(card => {
         const el = { title: String(card.title || "Card").substring(0, 80) };
@@ -153,7 +163,7 @@ class InstagramAPI {
         }
         return el;
       });
-      const data = await postMessage(accountId, token, {
+      const data = await postMessage(base, accountId, token, {
         recipient: { id: recipientId },
         message: {
           attachment: {
@@ -172,10 +182,10 @@ class InstagramAPI {
 
   // ─── Get user profile ─────────────────────────────────────────────────────────
   async getUserProfile(userId, client = null) {
-    const { token } = this._creds(client);
+    const { token, base } = this._creds(client);
     try {
       const res = await fetch(
-        `${BASE}/${userId}?fields=id,name,username,profile_pic&access_token=${token}`
+        `${base}/${userId}?fields=id,name,username,profile_pic&access_token=${token}`
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
@@ -188,9 +198,9 @@ class InstagramAPI {
 
   // ─── Reply to a comment publicly (posts in comment section, tags user) ───────
   async replyToComment(commentId, message, client = null) {
-    const { token } = this._creds(client);
+    const { token, base } = this._creds(client);
     try {
-      const res = await fetch(`${BASE}/${commentId}/replies`, {
+      const res = await fetch(`${base}/${commentId}/replies`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
